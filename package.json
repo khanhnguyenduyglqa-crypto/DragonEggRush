@@ -1,0 +1,43 @@
+{
+  "name": "dragon-egg-rush",
+  "productName": "Dragon Egg Rush",
+  "version": "1.0.0",
+  "description": "Dragon Egg Rush Phaser 3 game packaged as an Electron desktop app.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^42.3.3",
+    "electron-builder": "^24.6.0"
+  },
+  "build": {
+    "appId": "com.dragon-eggrush.app",
+    "productName": "Dragon Egg Rush",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
+    ],
+    "asar": false,
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "artifactName": "DragonEggRushSetup-${version}.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "DragonEggRushPortable-${version}.${ext}"
+    }
+  }
+}
