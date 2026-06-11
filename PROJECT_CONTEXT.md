@@ -377,3 +377,123 @@ DO NOT:
 * Create separate board resolution pipelines
 
 Always integrate with the existing architecture.
+PROJECT_CONTEXT.md - UPDATE
+
+## Dragon Energy
+
+Energy Requirement:
+30
+
+When reaching 30:
+
+* Skill becomes READY
+* Energy remains locked at max
+* Energy gain stops
+* Skill enters queue
+
+Energy resets only after skill activation.
+
+---
+
+## Dragon Queue Priority
+
+1. Ice
+2. Leaf
+3. Fire
+4. Earth
+
+Only one queued activation per dragon.
+
+Skills activate after combo resolution.
+
+---
+
+## Dragon Skill Display
+
+Skill names are hidden during normal gameplay UI.
+
+Skill names are displayed only during dragon cut-ins.
+
+---
+
+## Fire Dragon
+
+Display Name:
+HÀ NỘI GIỮA THÁNG 6
+
+Gameplay:
+
+* 3 random 2x2 explosions
+
+Visual:
+
+* Meteor strike sequence
+
+---
+
+## Ice Dragon
+
+Display Name:
+LỜI TỪ CHỐI CỦA CRUSH
+
+Gameplay:
+
+* Freeze timer for 5 seconds
+
+Visual:
+
+* Fullscreen freeze effect
+* Frozen timer frame
+
+---
+
+## Leaf Dragon
+
+Display Name:
+RAU SẠCH CẤP ĐẠI HỌC
+
+Gameplay:
+
+* Next 3 successful player moves gain x2 score
+
+Planned UI:
+
+* Visible remaining charges
+* Leaf buff indicator
+
+---
+
+## Earth Dragon
+
+Display Name:
+BÀNH TRƯỚNG LÃNH ĐỊA
+
+Gameplay:
+
+* Convert 10 random non-earth eggs
+* Destroy all earth eggs
+
+Visual:
+
+* Delayed visible petrification phase
+
+---
+
+## Special Match Presentation
+
+Match 4:
+
+* Beam attack presentation
+
+Match 5:
+
+* Wavy energy link presentation
+
+L/T:
+
+* Enlarged trigger egg
+* Charge-up
+* Explosion
+
+These are visual-only improvements.
+Gameplay logic remains unchanged.

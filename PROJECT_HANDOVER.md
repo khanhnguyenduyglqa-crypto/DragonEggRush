@@ -238,3 +238,195 @@ Read PROJECT_CONTEXT.md first.
 Then read PROJECT_HANDOVER.md.
 
 Do NOT rewrite existing gameplay systems unless explicitly requested.
+PROJECT_HANDOVER.md - UPDATE
+
+## Current Status
+
+Core gameplay:
+
+* Stable
+* Committed
+
+Dragon System:
+
+* Stable
+* All four dragon cut-ins implemented
+
+Current focus:
+
+* Skill visual polish
+* UI polish
+* Audio
+* Final balancing
+
+---
+
+## Dragon Skill Names
+
+Player-facing skill names:
+
+Fire:
+HÀ NỘI GIỮA THÁNG 6
+
+Ice:
+LỜI TỪ CHỐI CỦA CRUSH
+
+Leaf:
+RAU SẠCH CẤP ĐẠI HỌC
+
+Earth:
+BÀNH TRƯỚNG LÃNH ĐỊA
+
+These names are ONLY display names.
+
+Internal IDs remain:
+
+* fire
+* ice
+* leaf
+* earth
+
+---
+
+## Dragon UI
+
+Removed:
+
+* Skill names from dragon panels
+
+Keep:
+
+* Dragon portrait
+* Dragon name
+* Energy bar
+* Energy value
+
+Skill names are now revealed only through cut-ins.
+
+---
+
+## Dragon Cut-Ins
+
+Implemented:
+
+Fire
+Ice
+Leaf
+Earth
+
+Cut-in duration:
+~1.5 - 2 seconds
+
+Queue flow:
+
+Queued Skill
+→ Cut-In
+→ Skill Activation
+→ Continue Queue
+
+Removed:
+
+* Post-skill board text overlay
+
+Only cut-ins display skill names.
+
+---
+
+## Fire Dragon
+
+Skill:
+HÀ NỘI GIỮA THÁNG 6
+
+Gameplay:
+
+* 3 random 2x2 explosions
+
+Visuals:
+
+* Meteor warning markers
+* Falling meteors
+* Explosion impacts
+* Screen shake
+
+---
+
+## Ice Dragon
+
+Skill:
+LỜI TỪ CHỐI CỦA CRUSH
+
+Gameplay:
+
+* Freeze timer
+* 5 seconds
+
+Visuals:
+
+* Fullscreen freeze effect
+* Frost overlay
+* Frozen timer UI state
+* Frozen timer frame feedback
+
+---
+
+## Leaf Dragon
+
+Skill:
+RAU SẠCH CẤP ĐẠI HỌC
+
+Gameplay:
+
+* Next 3 successful player moves gain x2 score
+
+Planned / In Progress:
+
+* Persistent buff indicator
+* 🌿 x3 → 🌿 x2 → 🌿 x1 system
+* Score UI glow
+* Leaf buff feedback
+
+---
+
+## Earth Dragon
+
+Skill:
+BÀNH TRƯỚNG LÃNH ĐỊA
+
+Gameplay:
+
+* Convert 10 random non-earth eggs
+* Destroy all earth eggs
+
+Visuals:
+
+* Slower petrification phase
+* Visible conversion animation
+* Short pause before destruction
+
+---
+
+## Special Match Effects
+
+Match 4:
+
+* Beam effect from trigger egg
+
+Match 5:
+
+* Wavy links from trigger egg to same-color eggs
+
+L/T:
+
+* Trigger egg enlarges dramatically
+* Then detonates
+* Larger explosion effect
+
+---
+
+## Next Recommended Tasks
+
+1. Complete Leaf buff UI feedback
+2. Audio pass
+3. Juice / screen feedback polish
+4. Final balancing
+5. Release preparation
