@@ -56,13 +56,6 @@ const DEFAULT_BOARD_SKIN = {
   key: 'board-default',
   path: 'assets/boards/default_board.png',
 };
-const FIRE_STORM_CENTERS = [
-  { row: 2, col: 2 },
-  { row: 2, col: 3 },
-  { row: 3, col: 2 },
-  { row: 3, col: 3 }
-];
-
 let board = [];
 let tileSprites = [];
 let selectedEgg = null;
@@ -78,13 +71,28 @@ let comboCount = 0;
 let dragonEnergy = [0, 0, 0, 0];
 let dragonEnergyText = [];
 let dragonEnergyFill = [];
+let dragonReadyBadge = [];
 let pendingDragonSkills = [];
+let dragonEnergyLocked = {
+  fire: false,
+  ice: false,
+  leaf: false,
+  earth: false,
+};
+let dragonSkillReady = {
+  fire: false,
+  ice: false,
+  leaf: false,
+  earth: false,
+};
 let pendingFireStorm = null;
 let pendingEarthPetrify = false;
 let delayedSpecialQueue = [];
 let earthPetrifyTimeout = null;
 let scoreMultiplier = 1;
-let natureBlessingEvent = null;
+let leafDoubleScoreMovesRemaining = 0;
+let leafDoubleScoreActiveForCurrentMove = false;
+let leafSkillRefreshedDuringCurrentMove = false;
 let frozenTimeActive = false;
 let frozenTimeEvent = null;
 let frozenTimeRemaining = 0;
@@ -119,6 +127,7 @@ function create() {
 
   dragonEnergyText = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}EnergyProgress`));
   dragonEnergyFill = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}EnergyFill`));
+  dragonReadyBadge = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}ReadyBadge`));
 
   restartButton.addEventListener('click', resetGame);
   overlayRestartButton.addEventListener('click', resetGame);
@@ -509,6 +518,7 @@ function swapEggs(first, second) {
       console.log('lastSwappedCells', lastSwappedCells);
       selectedEgg = null;
       // Manual match start: set combo to 1 and show feedback
+      startLeafScoreForSuccessfulMove();
       comboCount = 1;
       updateUi();
       pulseCombo();
@@ -883,13 +893,7 @@ function processDelayedSpecialQueue(onComplete) {
     totalScoreGain *= 2;
   }
 
-  destroyedCells.forEach((key) => {
-    const [row, col] = key.split('-').map(Number);
-    const type = board[row][col];
-    if (type !== null && type !== undefined) {
-      gainDragonEnergy(type);
-    }
-  });
+  grantDragonEnergyForDestroyedCells(destroyedCells, 'match');
 
   addScore(totalScoreGain);
   const popupPosition = getEggPosition(triggerCell.row, triggerCell.col);
@@ -900,7 +904,7 @@ function processDelayedSpecialQueue(onComplete) {
   animateRemovals(destroyedCells, () => {
     console.log('Delayed special complete');
     processDelayedSpecialQueue(onComplete);
-  });
+  }, { source: 'match' });
 }
 
 function clearDelayedSpecialQueue() {
@@ -952,13 +956,7 @@ function resolveBoard(isAutomatic = false) {
       if (pendingFireStorm) {
         const destroyedCells = new Set();
         const totalScoreGain = applyPendingFireStorm(destroyedCells);
-        destroyedCells.forEach((key) => {
-          const [row, col] = key.split('-').map(Number);
-          const type = board[row][col];
-          if (type !== null && type !== undefined) {
-            gainDragonEnergy(type);
-          }
-        });
+        grantDragonEnergyForDestroyedCells(destroyedCells, 'dragonSkill');
 
         addScore(totalScoreGain);
         if (isGameOver) {
@@ -974,7 +972,7 @@ function resolveBoard(isAutomatic = false) {
             return;
           }
           runStep();
-        });
+        }, { source: 'dragonSkill' });
         return;
       }
 
@@ -989,6 +987,8 @@ function resolveBoard(isAutomatic = false) {
       if (activatePendingDragonSkills(true)) {
         return;
       }
+      finishLeafScoreForSuccessfulMove();
+      unlockAllDragonEnergy();
       isAnimating = false;
       return;
     }
@@ -1064,15 +1064,7 @@ function resolveBoard(isAutomatic = false) {
       }
     });
 
-    totalScoreGain += applyPendingFireStorm(destroyedCells);
-
-    destroyedCells.forEach((key) => {
-      const [row, col] = key.split('-').map(Number);
-      const type = board[row][col];
-      if (type !== null && type !== undefined) {
-        gainDragonEnergy(type);
-      }
-    });
+    grantDragonEnergyForDestroyedCells(destroyedCells, 'match');
 
     addScore(totalScoreGain);
     if (isGameOver) {
@@ -1095,7 +1087,7 @@ function resolveBoard(isAutomatic = false) {
         }
         runStep();
       });
-    });
+    }, { source: 'match' });
   };
 
   runStep();
@@ -1218,7 +1210,9 @@ function pulseCombo() {
   } catch (e) {}
 }
 
-function animateRemovals(removalSet, onComplete) {
+function animateRemovals(removalSet, onComplete, options = {}) {
+  const source = options.source || 'match';
+  console.log('Destroy source:', source);
   if (isGameOver) {
     console.log('Resolve stopped because game over');
     return;
@@ -1634,14 +1628,24 @@ function updateUi() {
 }
 
 function updateDragonEnergyUi() {
+  const meterElements = document.querySelectorAll('.energy-meter');
   dragonEnergy.forEach((value, index) => {
     const progressElement = dragonEnergyText[index];
     const fillElement = dragonEnergyFill[index];
+    const readyBadge = dragonReadyBadge[index];
+    const skillType = DRAGON_SKILL_TYPES[index];
+    const clampedValue = Math.min(value, DRAGON_ENERGY_MAX);
     if (progressElement) {
-      progressElement.textContent = `${value}/${DRAGON_ENERGY_MAX}`;
+      progressElement.textContent = `${clampedValue}/${DRAGON_ENERGY_MAX}`;
     }
     if (fillElement) {
-      fillElement.style.width = `${(value / DRAGON_ENERGY_MAX) * 100}%`;
+      fillElement.style.width = `${(clampedValue / DRAGON_ENERGY_MAX) * 100}%`;
+    }
+    if (readyBadge) {
+      readyBadge.hidden = !dragonSkillReady[skillType];
+    }
+    if (meterElements[index]) {
+      meterElements[index].classList.toggle('dragon-skill-ready', dragonSkillReady[skillType]);
     }
   });
 }
@@ -1675,10 +1679,10 @@ function getRandomBoardCell() {
   return validCells[Math.floor(Math.random() * validCells.length)];
 }
 
-function getFireStormArea(center) {
+function getFireStormExplosionCells(topLeft) {
   const cells = [];
-  for (let row = center.row - 2; row <= center.row + 2; row++) {
-    for (let col = center.col - 2; col <= center.col + 2; col++) {
+  for (let row = topLeft.row; row <= topLeft.row + 1; row++) {
+    for (let col = topLeft.col; col <= topLeft.col + 1; col++) {
       if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
         cells.push({ row, col });
       }
@@ -1687,43 +1691,52 @@ function getFireStormArea(center) {
   return cells;
 }
 
+function getRandomFireStormExplosions(count = 3) {
+  const explosions = [];
+  for (let i = 0; i < count; i++) {
+    explosions.push({
+      row: Phaser.Math.Between(0, ROWS - 2),
+      col: Phaser.Math.Between(0, COLS - 2),
+    });
+  }
+  return explosions;
+}
+
 function applyPendingFireStorm(destroyedCells) {
   if (!pendingFireStorm) {
     return 0;
   }
 
-  console.log('Processing pending Fire Storm');
-  const stormCells = getFireStormArea(pendingFireStorm.center);
-  console.log('Fire Storm cells to destroy:', stormCells.length);
+  console.log('Fire Dragon: 3 random 2x2 explosions');
   let newStormDestroyed = 0;
-  stormCells.forEach((tile) => {
-    const key = `${tile.row}-${tile.col}`;
-    if (!destroyedCells.has(key)) {
-      destroyedCells.add(key);
-      newStormDestroyed += 1;
-    }
+  pendingFireStorm.explosions.forEach((topLeft) => {
+    const stormCells = getFireStormExplosionCells(topLeft);
+    console.log('Fire explosion cells:', stormCells.map((tile) => `${tile.row}-${tile.col}`).join(', '));
+    stormCells.forEach((tile) => {
+      const key = `${tile.row}-${tile.col}`;
+      if (!destroyedCells.has(key) && board[tile.row][tile.col] !== null && board[tile.row][tile.col] !== undefined) {
+        destroyedCells.add(key);
+        newStormDestroyed += 1;
+      }
+    });
+    showFireStormEffect(topLeft);
   });
 
-  console.log('Fire Storm destroyed eggs', stormCells.length);
-  console.log('Fire Storm bonus +50');
-  const centerPosition = getEggPosition(pendingFireStorm.center.row, pendingFireStorm.center.col);
-  const centerX = centerPosition.x;
-  const centerY = centerPosition.y;
-  showFireStormEffect(pendingFireStorm.center);
-  createScorePopup(centerX, centerY + 28, '+50 Bonus', 28);
+  console.log('Fire Storm destroyed eggs', newStormDestroyed);
   pendingFireStorm = null;
-  return newStormDestroyed * MATCH_SCORE + 50;
+  return newStormDestroyed * MATCH_SCORE;
 }
 
 function triggerFireStorm() {
   // Deprecated: use activateFireDragonSkill() instead
 }
 
-function showFireStormEffect(center) {
+function showFireStormEffect(topLeft) {
   if (!gameInstance) return;
-  const position = getEggPosition(center.row, center.col);
-  const x = position.x;
-  const y = position.y;
+  const first = getEggPosition(topLeft.row, topLeft.col);
+  const second = getEggPosition(topLeft.row + 1, topLeft.col + 1);
+  const x = (first.x + second.x) / 2;
+  const y = (first.y + second.y) / 2;
 
   const explosion = gameInstance.add.circle(x, y, 24, 0xff6600, 0.75);
   explosion.setDepth(900);
@@ -1757,6 +1770,23 @@ function showFireStormEffect(center) {
   });
 }
 
+function grantDragonEnergyForDestroyedCells(destroyedCells, source = 'match') {
+  const shouldGrantEnergy = source === 'match';
+  console.log('Destroy source:', source);
+  console.log('Energy granted:', shouldGrantEnergy);
+  if (!shouldGrantEnergy) {
+    return;
+  }
+
+  destroyedCells.forEach((key) => {
+    const [row, col] = key.split('-').map(Number);
+    const type = board[row] && board[row][col];
+    if (type !== null && type !== undefined) {
+      gainDragonEnergy(type);
+    }
+  });
+}
+
 function gainDragonEnergy(type) {
   if (isGameOver) {
     return;
@@ -1766,42 +1796,82 @@ function gainDragonEnergy(type) {
     return;
   }
 
-  dragonEnergy[type] += 1;
+  const skillType = DRAGON_SKILL_TYPES[type];
+  if (dragonEnergyLocked[skillType] || dragonSkillReady[skillType]) {
+    console.log('Energy ignored because locked');
+    console.log('Energy gain locked for:', skillType);
+    return;
+  }
+
+  dragonEnergy[type] = Math.min(dragonEnergy[type] + 1, DRAGON_ENERGY_MAX);
   console.log(`${DRAGON_TYPES[type]} energy +1`);
   console.log('Fire energy:', dragonEnergy[0]);
 
   if (dragonEnergy[type] >= DRAGON_ENERGY_MAX) {
     console.log(`${DRAGON_TYPES[type]} Dragon skill ready`);
+    console.log('Dragon reached 30: READY');
     pulseDragonEnergyReady(type);
-    dragonEnergy[type] = 0;
-    console.log('Energy reached 30, skill queued');
-    queueDragonSkill(DRAGON_SKILL_TYPES[type]);
-    if (type === 1) {
-      console.log('Ice energy reset to 0');
-      updateUi();
-    }
-    if (type === 0) {
-      console.log('Fire energy reset to 0');
-    }
-    if (type === 2) {
-      console.log('Leaf energy reset to 0');
-      updateDragonEnergyUi();
-    }
-    if (type === 3) {
-      console.log('Earth energy reset to 0');
-      updateDragonEnergyUi();
-    }
+    queueDragonSkill(skillType);
+    lockDragonEnergy(skillType);
+    dragonSkillReady[skillType] = true;
+    updateDragonEnergyUi();
   }
+}
+
+function isDragonSkillQueued(type) {
+  return pendingDragonSkills.includes(type);
+}
+
+function lockDragonEnergy(type) {
+  if (!type || dragonEnergyLocked[type]) {
+    return;
+  }
+
+  dragonEnergyLocked[type] = true;
+  console.log('Dragon energy locked:', type);
+}
+
+function unlockAllDragonEnergy() {
+  const hadLockedEnergy = Object.keys(dragonEnergyLocked).some((type) => dragonEnergyLocked[type]);
+  dragonEnergyLocked = {
+    fire: false,
+    ice: false,
+    leaf: false,
+    earth: false,
+  };
+  if (hadLockedEnergy) {
+    console.log('Dragon energy unlocked after combo chain');
+  }
+}
+
+function resetDragonEnergyAfterActivation(type) {
+  const index = DRAGON_SKILL_TYPES.indexOf(type);
+  if (index === -1) {
+    return;
+  }
+
+  dragonEnergy[index] = 0;
+  dragonSkillReady[type] = false;
+  console.log('Energy reset after activation');
+  updateDragonEnergyUi();
 }
 
 function queueDragonSkill(type) {
   if (!type) {
-    return;
+    return false;
+  }
+
+  if (isDragonSkillQueued(type)) {
+    console.log('Duplicate dragon skill skipped:', type);
+    console.log('Skill already queued, skipping duplicate:', type);
+    return false;
   }
 
   pendingDragonSkills.push(type);
   console.log('Dragon skill queued:', type);
+  console.log('Skill queued', type);
   updateDragonEnergyUi();
+  return true;
 }
 
 function activatePendingDragonSkills(isFinalResolution = false) {
@@ -1822,6 +1892,8 @@ function activatePendingDragonSkills(isFinalResolution = false) {
   while (pendingDragonSkills.length && !isGameOver) {
     const skillType = pendingDragonSkills.shift();
     console.log('Pending skill activated:', skillType);
+    console.log('Skill activated', skillType);
+    resetDragonEnergyAfterActivation(skillType);
 
     if (skillType === 'fire') {
       activateFireDragonSkill();
@@ -1858,12 +1930,13 @@ function activateFireDragonSkill() {
     return;
   }
 
-  const center = FIRE_STORM_CENTERS[Math.floor(Math.random() * FIRE_STORM_CENTERS.length)];
   console.log('Fire Dragon skill activated');
-  console.log('Fire Storm picked center:', center.row, center.col);
-  const radius = 2;
-  console.log('Fire Storm 5x5 target cells:', getFireStormArea(center).length);
-  pendingFireStorm = { center };
+  const explosions = getRandomFireStormExplosions(3);
+  console.log('Fire Dragon: 3 random 2x2 explosions');
+  explosions.forEach((topLeft) => {
+    console.log('Fire explosion cells:', getFireStormExplosionCells(topLeft).map((tile) => `${tile.row}-${tile.col}`).join(', '));
+  });
+  pendingFireStorm = { explosions };
 }
 
 function activateEarthDragonSkill() {
@@ -1889,7 +1962,7 @@ function runPendingEarthPetrify() {
   deselectEgg();
 
   const convertedEggs = convertRandomEggsToEarth(10);
-  console.log('Petrify converted eggs:');
+  console.log('Earth Dragon: converted eggs');
   convertedEggs.forEach((egg) => {
     console.log('row, col', egg.row, egg.col);
   });
@@ -1905,9 +1978,41 @@ function runPendingEarthPetrify() {
       console.log('Resolve stopped because game over');
       return;
     }
-    console.log('Checking matches after Petrify');
-    resolveBoard(false);
+    clearAllEarthEggsFromPetrify();
   }, 500);
+}
+
+function clearAllEarthEggsFromPetrify() {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
+  console.log('Earth Dragon: clearing all Earth eggs');
+  const destroyedCells = new Set();
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      if (board[row][col] === EARTH_TYPE) {
+        destroyedCells.add(`${row}-${col}`);
+      }
+    }
+  }
+
+  grantDragonEnergyForDestroyedCells(destroyedCells, 'dragonSkill');
+  addScore(destroyedCells.size * MATCH_SCORE);
+
+  const boardCenter = getPlayableBoardCenter();
+  if (destroyedCells.size > 0) {
+    createScorePopup(boardCenter.x, boardCenter.y, `+${destroyedCells.size * MATCH_SCORE}`, 32);
+  }
+
+  animateRemovals(destroyedCells, () => {
+    if (isGameOver) {
+      console.log('Resolve stopped because game over');
+      return;
+    }
+    resolveBoard(true);
+  }, { source: 'dragonSkill' });
 }
 
 function convertRandomEggsToEarth(limit) {
@@ -2003,55 +2108,68 @@ function activateLeafDragonSkill() {
     return;
   }
 
-  console.log('Leaf Dragon skill activated');
-  
-  if (natureBlessingEvent) {
-    clearTimeout(natureBlessingEvent);
-    console.log('Nature Blessing refreshed');
+  leafDoubleScoreMovesRemaining = 3;
+  if (leafDoubleScoreActiveForCurrentMove) {
+    leafSkillRefreshedDuringCurrentMove = true;
   }
-  
-  scoreMultiplier = 2;
-  console.log('Score multiplier x2 active');
-  
-  const leafMeterElement = document.querySelector('.energy-meter:nth-child(3)');
-  if (leafMeterElement) {
-    leafMeterElement.classList.add('nature-blessing-active');
-    const countdownElement = leafMeterElement.querySelector('.blessing-countdown');
-    if (countdownElement) {
-      countdownElement.style.display = 'block';
-      let timeLeft = 5;
-      const updateCountdown = () => {
-        countdownElement.textContent = `${timeLeft}s`;
-        if (timeLeft > 0) {
-          timeLeft--;
-          setTimeout(updateCountdown, 1000);
-        }
-      };
-      updateCountdown();
-    }
-  }
-  
-  showTimerPopup('Nature Blessing x2!');
-  
-  natureBlessingEvent = setTimeout(() => {
-    deactivateNatureBlessing();
-  }, 5000);
+  console.log('Leaf Dragon skill activated: next 3 moves x2');
+  console.log('Leaf moves remaining:', leafDoubleScoreMovesRemaining);
+  updateLeafBlessingUi();
+  showTimerPopup('Nature Blessing x2: 3 moves!');
 }
 
-function deactivateNatureBlessing() {
-  scoreMultiplier = 1;
-  console.log('Nature Blessing ended');
-  
+function updateLeafBlessingUi() {
   const leafMeterElement = document.querySelector('.energy-meter:nth-child(3)');
   if (leafMeterElement) {
-    leafMeterElement.classList.remove('nature-blessing-active');
-    const countdownElement = leafMeterElement.querySelector('.blessing-countdown');
-    if (countdownElement) {
-      countdownElement.style.display = 'none';
+    leafMeterElement.classList.toggle('nature-blessing-active', leafDoubleScoreMovesRemaining > 0);
+    const moveCounterElement = leafMeterElement.querySelector('.blessing-move-counter');
+    if (moveCounterElement) {
+      if (leafDoubleScoreMovesRemaining > 0) {
+        const moveLabel = leafDoubleScoreMovesRemaining === 1 ? 'move' : 'moves';
+        moveCounterElement.textContent = `x2 Score: ${leafDoubleScoreMovesRemaining} ${moveLabel}`;
+        moveCounterElement.style.display = 'block';
+      } else {
+        moveCounterElement.style.display = 'none';
+        moveCounterElement.textContent = '';
+      }
     }
   }
-  
-  natureBlessingEvent = null;
+}
+
+function startLeafScoreForSuccessfulMove() {
+  leafSkillRefreshedDuringCurrentMove = false;
+  if (leafDoubleScoreMovesRemaining > 0) {
+    leafDoubleScoreActiveForCurrentMove = true;
+    scoreMultiplier = 2;
+    console.log('Leaf x2 active for this move');
+    updateLeafBlessingUi();
+    return;
+  }
+
+  leafDoubleScoreActiveForCurrentMove = false;
+  scoreMultiplier = 1;
+}
+
+function finishLeafScoreForSuccessfulMove() {
+  if (!leafDoubleScoreActiveForCurrentMove) {
+    scoreMultiplier = 1;
+    leafSkillRefreshedDuringCurrentMove = false;
+    return;
+  }
+
+  if (!leafSkillRefreshedDuringCurrentMove) {
+    leafDoubleScoreMovesRemaining = Math.max(0, leafDoubleScoreMovesRemaining - 1);
+  }
+
+  console.log('Leaf moves remaining:', leafDoubleScoreMovesRemaining);
+  if (leafDoubleScoreMovesRemaining === 0) {
+    console.log('Leaf buff expired');
+  }
+
+  scoreMultiplier = 1;
+  leafDoubleScoreActiveForCurrentMove = false;
+  leafSkillRefreshedDuringCurrentMove = false;
+  updateLeafBlessingUi();
 }
 
 function activateIceDragonSkill() {
@@ -2124,12 +2242,22 @@ function flashFrozenTimer() {
 }
 
 function clearDragonSkillUi() {
+  document.querySelectorAll('.energy-meter').forEach((meter) => {
+    meter.classList.remove('dragon-skill-ready');
+  });
+  dragonReadyBadge.forEach((badge) => {
+    if (badge) {
+      badge.hidden = true;
+    }
+  });
+
   const leafMeterElement = document.querySelector('.energy-meter:nth-child(3)');
   if (leafMeterElement) {
     leafMeterElement.classList.remove('nature-blessing-active');
-    const countdownElement = leafMeterElement.querySelector('.blessing-countdown');
-    if (countdownElement) {
-      countdownElement.style.display = 'none';
+    const moveCounterElement = leafMeterElement.querySelector('.blessing-move-counter');
+    if (moveCounterElement) {
+      moveCounterElement.style.display = 'none';
+      moveCounterElement.textContent = '';
     }
   }
 
@@ -2237,16 +2365,24 @@ function endGame() {
   isAnimating = true;
   lastSwappedCells = [];
   pendingDragonSkills = [];
+  dragonEnergyLocked = {
+    fire: false,
+    ice: false,
+    leaf: false,
+    earth: false,
+  };
+  dragonSkillReady = {
+    fire: false,
+    ice: false,
+    leaf: false,
+    earth: false,
+  };
   pendingFireStorm = null;
   pendingEarthPetrify = false;
   clearDelayedSpecialQueue();
   if (earthPetrifyTimeout) {
     clearTimeout(earthPetrifyTimeout);
     earthPetrifyTimeout = null;
-  }
-  if (natureBlessingEvent) {
-    clearTimeout(natureBlessingEvent);
-    natureBlessingEvent = null;
   }
   if (frozenTimeEvent) {
     clearTimeout(frozenTimeEvent);
@@ -2255,6 +2391,9 @@ function endGame() {
   frozenTimeActive = false;
   frozenTimeRemaining = 0;
   scoreMultiplier = 1;
+  leafDoubleScoreMovesRemaining = 0;
+  leafDoubleScoreActiveForCurrentMove = false;
+  leafSkillRefreshedDuringCurrentMove = false;
   clearDragonSkillUi();
   deselectEgg();
   selectedEgg = null;
@@ -2281,6 +2420,18 @@ function resetGame() {
   selectedEgg = null;
   lastSwappedCells = [];
   pendingDragonSkills = [];
+  dragonEnergyLocked = {
+    fire: false,
+    ice: false,
+    leaf: false,
+    earth: false,
+  };
+  dragonSkillReady = {
+    fire: false,
+    ice: false,
+    leaf: false,
+    earth: false,
+  };
   pendingFireStorm = null;
   pendingEarthPetrify = false;
   clearDelayedSpecialQueue();
@@ -2293,12 +2444,11 @@ function resetGame() {
     countdownEvent = null;
   }
   scoreMultiplier = 1;
+  leafDoubleScoreMovesRemaining = 0;
+  leafDoubleScoreActiveForCurrentMove = false;
+  leafSkillRefreshedDuringCurrentMove = false;
   frozenTimeActive = false;
   frozenTimeRemaining = 0;
-  if (natureBlessingEvent) {
-    clearTimeout(natureBlessingEvent);
-    natureBlessingEvent = null;
-  }
   if (frozenTimeEvent) {
     clearTimeout(frozenTimeEvent);
     frozenTimeEvent = null;
