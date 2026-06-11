@@ -48,6 +48,8 @@ body {
 }
 
 .stat {
+  position: relative;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -66,6 +68,57 @@ body {
 #comboText {
   font-size: 1.45rem;
   font-weight: 700;
+}
+
+.score-leaf-boost-active {
+  border-color: rgba(140, 255, 102, 0.58);
+  background:
+    linear-gradient(135deg, rgba(46, 204, 113, 0.16), rgba(140, 255, 102, 0.07)),
+    rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 20px rgba(74, 254, 90, 0.38),
+    inset 0 0 16px rgba(140, 255, 102, 0.12);
+}
+
+.score-leaf-boost-active #scoreValue {
+  color: #eaffdf;
+  text-shadow: 0 0 10px rgba(140, 255, 102, 0.72);
+}
+
+.leaf-buff-indicator {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 3;
+  padding: 3px 8px;
+  border: 1px solid rgba(186, 255, 138, 0.52);
+  border-radius: 999px;
+  background: rgba(19, 70, 28, 0.82);
+  color: #dfffba;
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 12px rgba(74, 254, 90, 0.35);
+  animation: leafBuffBadgePulse 1.4s ease-in-out infinite;
+}
+
+.leaf-buff-indicator.leaf-buff-ending {
+  animation: leafBuffFadeOut 0.42s ease forwards;
+}
+
+.leaf-score-pulse {
+  animation: leafScorePulse 0.42s ease;
+}
+
+.leaf-fall {
+  position: fixed;
+  pointer-events: none;
+  z-index: 2200;
+  color: #8cff66;
+  font-size: 18px;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(74, 254, 90, 0.8);
+  animation: leafFall 0.85s ease-in forwards;
 }
 
 .timer-flash {
@@ -97,6 +150,28 @@ body {
   0% { box-shadow: 0 0 0 rgba(0, 140, 255, 0.6); }
   50% { box-shadow: 0 0 20px rgba(0, 140, 255, 0.9); }
   100% { box-shadow: 0 0 0 rgba(0, 140, 255, 0); }
+}
+
+@keyframes leafBuffBadgePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 12px rgba(74, 254, 90, 0.35); }
+  50% { transform: scale(1.08); box-shadow: 0 0 18px rgba(140, 255, 102, 0.56); }
+}
+
+@keyframes leafScorePulse {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.04); box-shadow: 0 0 28px rgba(140, 255, 102, 0.58), inset 0 0 18px rgba(140, 255, 102, 0.18); }
+  100% { transform: scale(1); }
+}
+
+@keyframes leafFall {
+  0% { opacity: 0; transform: translateY(-8px) rotate(-12deg) scale(0.8); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(58px) rotate(42deg) scale(1.12); }
+}
+
+@keyframes leafBuffFadeOut {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.72); }
 }
 
 button {
@@ -195,7 +270,7 @@ button:hover {
 
 .energy-card {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   width: 276px;
   min-width: 0;
   padding: 14px 16px;
@@ -227,12 +302,6 @@ button:hover {
   width: 1.35rem;
   height: 1.35rem;
   line-height: 1;
-}
-
-.skill-name {
-  margin-top: 3px;
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.74);
 }
 
 .info-icon {
@@ -496,11 +565,81 @@ button:hover {
 }
 
 .frozen-timer-glow {
-  animation: frozenTimerFlash 0.35s ease;
+  border-color: rgba(190, 244, 255, 0.72);
+  background:
+    linear-gradient(135deg, rgba(223, 246, 255, 0.18), rgba(77, 184, 255, 0.08)),
+    rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 22px rgba(77, 184, 255, 0.55),
+    inset 0 0 18px rgba(223, 246, 255, 0.16);
+}
+
+.frozen-timer-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, transparent 12%, rgba(223, 246, 255, 0.28) 13%, transparent 15%),
+    linear-gradient(35deg, transparent 64%, rgba(126, 216, 255, 0.22) 65%, transparent 67%);
+  opacity: 0.8;
+}
+
+.frozen-timer-glow::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  border: 1px solid rgba(223, 246, 255, 0.5);
+  border-radius: 9px;
+  box-shadow: inset 0 0 10px rgba(223, 246, 255, 0.2);
+}
+
+.frozen-timer-glow .stat-label,
+.frozen-timer-glow #timerValue {
+  position: relative;
+  z-index: 2;
+}
+
+.frozen-timer-glow #timerValue {
+  color: #f3fdff;
+  text-shadow: 0 0 10px rgba(126, 216, 255, 0.9), 0 0 18px rgba(223, 246, 255, 0.45);
+}
+
+.timer-freeze-pulse {
+  animation: frozenTimerFlash 0.42s ease;
+}
+
+.timer-frost-shard {
+  position: absolute;
+  pointer-events: none;
+  width: 26px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(223, 246, 255, 0.86);
+  box-shadow: 0 0 8px rgba(77, 184, 255, 0.7);
+  z-index: 1;
+}
+
+.timer-frost-sparkle {
+  position: absolute;
+  pointer-events: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f3fdff;
+  box-shadow: 0 0 9px rgba(126, 216, 255, 0.95);
+  z-index: 1;
+  animation: timerFrostSparkle 1.1s ease-in-out infinite;
 }
 
 @keyframes frozenTimerFlash {
-  0% { box-shadow: 0 0 0 rgba(77, 184, 255, 0.6); }
-  50% { box-shadow: 0 0 20px rgba(77, 184, 255, 0.9); }
-  100% { box-shadow: 0 0 0 rgba(77, 184, 255, 0); }
+  0% { transform: scale(1); }
+  45% { transform: scale(1.045); box-shadow: 0 0 34px rgba(126, 216, 255, 0.85), inset 0 0 24px rgba(223, 246, 255, 0.24); }
+  100% { transform: scale(1); }
+}
+
+@keyframes timerFrostSparkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.25); }
 }

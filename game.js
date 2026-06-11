@@ -46,12 +46,112 @@ const EGG_VISUALS = [
 ];
 const DRAGON_TYPES = ['Fire', 'Ice', 'Leaf', 'Earth'];
 const DRAGON_SKILL_TYPES = ['fire', 'ice', 'leaf', 'earth'];
+const DRAGON_SKILL_PRIORITY = {
+  ice: 1,
+  leaf: 2,
+  fire: 3,
+  earth: 4,
+};
+const DRAGON_CUT_IN_CONFIGS = {
+  fire: {
+    dragonType: 'fire',
+    title: 'HÀ NỘI GIỮA THÁNG 6',
+    portraitKey: 'fire_dragon',
+    portraitPath: 'assets/dragons/fire_dragon.png',
+    visualStyle: 'fire',
+    accentColor: 0xff6a1a,
+    overlayColor: 0x050309,
+    flashColor: 0xffffff,
+    flashAlpha: 0.88,
+    titleColor: '#ffbf42',
+  },
+  ice: {
+    dragonType: 'ice',
+    title: 'LỜI TỪ CHỐI CỦA CRUSH',
+    portraitKey: 'ice_dragon',
+    portraitPath: 'assets/dragons/ice_dragon.png',
+    visualStyle: 'ice',
+    accentColor: 0x7ed8ff,
+    overlayColor: 0x061627,
+    flashColor: 0xcff7ff,
+    flashAlpha: 0.46,
+    titleColor: '#dff6ff',
+  },
+  leaf: {
+    dragonType: 'leaf',
+    title: 'RAU SẠCH CẤP ĐẠI HỌC',
+    portraitKey: 'leaf_dragon',
+    portraitPath: 'assets/dragons/leaf_dragon.png',
+    visualStyle: 'leaf',
+    accentColor: 0x72ff66,
+    overlayColor: 0x071b0b,
+    flashColor: 0xd8ffd1,
+    flashAlpha: 0.56,
+    titleColor: '#baff8a',
+  },
+  earth: {
+    dragonType: 'earth',
+    title: 'BÀNH TRƯỚNG LÃNH ĐỊA',
+    portraitKey: 'earth_dragon',
+    portraitPath: 'assets/dragons/earth_dragon.png',
+    visualStyle: 'earth',
+    accentColor: 0xd8aa55,
+    overlayColor: 0x1f1408,
+    flashColor: 0xf1d08a,
+    flashAlpha: 0.5,
+    titleColor: '#e8c978',
+  },
+};
 const EARTH_TYPE = EGG_TYPES.indexOf('earth');
 const DRAGON_ENERGY_MAX = 30;
 const NORMAL_SCALE = 1;
 const SELECTED_SCALE = 1.15;
 const MATCH_SCORE = 10;
 const TIMER_SECONDS = 90;
+const EGG_DESTROY_DURATION = 260;
+const EARTH_CONVERSION_STAGGER = 55;
+const EARTH_CONVERSION_HOLD = 520;
+const EGG_DESTROY_THEMES = [
+  {
+    primary: 0xff4d2e,
+    secondary: 0xffb347,
+    glow: 0xff6a1a,
+    shape: 'ember',
+  },
+  {
+    primary: 0x7ed8ff,
+    secondary: 0xe8fbff,
+    glow: 0x4db8ff,
+    shape: 'shard',
+  },
+  {
+    primary: 0x56d86a,
+    secondary: 0xc7ff8a,
+    glow: 0x2ecc71,
+    shape: 'leaf',
+  },
+  {
+    primary: 0xb8860b,
+    secondary: 0xe0c068,
+    glow: 0x8a6230,
+    shape: 'stone',
+  },
+];
+const DRAGON_CUT_IN_TIMING = {
+  overlayIn: 160,
+  accentSweep: 340,
+  portraitIn: 360,
+  firePortraitIn: 300,
+  titleIn: 260,
+  fireTitleIn: 220,
+  titleDelay: 260,
+  fireTitleDelay: 360,
+  flashAt: 1380,
+  flashDuration: 90,
+  exitAt: 1450,
+  exitDuration: 250,
+  total: 1700,
+};
 const DEFAULT_BOARD_SKIN = {
   key: 'board-default',
   path: 'assets/boards/default_board.png',
@@ -89,13 +189,17 @@ let pendingFireStorm = null;
 let pendingEarthPetrify = false;
 let delayedSpecialQueue = [];
 let earthPetrifyTimeout = null;
+let earthPetrifyToken = 0;
 let scoreMultiplier = 1;
 let leafDoubleScoreMovesRemaining = 0;
 let leafDoubleScoreActiveForCurrentMove = false;
 let leafSkillRefreshedDuringCurrentMove = false;
+let leafBuffIndicatorElement = null;
 let frozenTimeActive = false;
 let frozenTimeEvent = null;
 let frozenTimeRemaining = 0;
+let iceFreezeOverlay = null;
+let timerFrozenVisualElements = [];
 let scoreText;
 let timerText;
 let comboText;
@@ -105,11 +209,16 @@ let restartButton;
 let overlayRestartButton;
 let gameInstance;
 let boardSkinSprite;
+let activeDragonCutIn = null;
+let dragonCutInToken = 0;
 
 function preload() {
   this.load.image(DEFAULT_BOARD_SKIN.key, DEFAULT_BOARD_SKIN.path);
   EGG_VISUALS.forEach((egg) => {
     this.load.image(egg.key, egg.path);
+  });
+  Object.values(DRAGON_CUT_IN_CONFIGS).forEach((dragon) => {
+    this.load.image(dragon.portraitKey, dragon.portraitPath);
   });
 }
 
@@ -851,7 +960,6 @@ function getDelayedSpecialTargets(delayedSpecial, triggerCell) {
       centerCell: triggerCell,
       matchedCells: [triggerCell],
     };
-    showMatch4Beam(effect);
     return getMatch4Targets(effect);
   }
 
@@ -901,10 +1009,12 @@ function processDelayedSpecialQueue(onComplete) {
     createScorePopup(popupPosition.x, popupPosition.y, `+${totalScoreGain}`, 32);
   }
 
-  animateRemovals(destroyedCells, () => {
-    console.log('Delayed special complete');
-    processDelayedSpecialQueue(onComplete);
-  }, { source: 'match' });
+  playDelayedSpecialActivationEffect(delayedSpecial, triggerCell, destroyedCells, () => {
+    animateRemovals(destroyedCells, () => {
+      console.log('Delayed special complete');
+      processDelayedSpecialQueue(onComplete);
+    }, { source: 'match' });
+  });
 }
 
 function clearDelayedSpecialQueue() {
@@ -1150,41 +1260,416 @@ function getFullLine(direction, tile) {
 
 }
 
-function showMatch4Beam(effect) {
-  if (!gameInstance || !effect.centerCell) return;
+function getCellsFromRemovalSet(removalSet) {
+  return Array.from(removalSet).map((key) => {
+    const [row, col] = key.split('-').map(Number);
+    return { row, col };
+  });
+}
 
-  const center = effect.centerCell;
+function createCellImpactFlash(cell, theme, delay = 0) {
+  if (!gameInstance) return;
+
+  const position = getEggPosition(cell.row, cell.col);
+  gameInstance.time.delayedCall(delay, () => {
+    if (isGameOver) return;
+
+    const flash = gameInstance.add.circle(position.x, position.y, 18, theme.secondary, 0.46);
+    flash.setDepth(910);
+    gameInstance.tweens.add({
+      targets: flash,
+      scale: 1.9,
+      alpha: 0,
+      duration: 150,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        try { flash.destroy(); } catch (e) {}
+      },
+    });
+  });
+}
+
+function playMatch4BeamEffect(triggerCell, affectedCells, direction, onComplete) {
+  if (!gameInstance) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const triggerType = board[triggerCell.row] && board[triggerCell.row][triggerCell.col];
+  const theme = getEggDestroyTheme(triggerType);
   const metrics = getBoardMetrics();
-  const beamPosition = getEggPosition(center.row, center.col);
-  const boardCenter = getPlayableBoardCenter();
-  const isVerticalBeam = effect.direction === 'horizontal';
-  const beam = gameInstance.add.rectangle(
-    isVerticalBeam ? beamPosition.x : boardCenter.x,
-    isVerticalBeam ? boardCenter.y : beamPosition.y,
-    isVerticalBeam ? metrics.cellWidth * 0.22 : metrics.playableWidth,
-    isVerticalBeam ? metrics.playableHeight : metrics.cellHeight * 0.22,
-    0xffffff,
-    0.36
-  );
-  beam.setDepth(880);
+  const origin = getEggPosition(triggerCell.row, triggerCell.col);
+  const clearsColumn = direction === 'horizontal';
+  const beamThickness = Math.min(metrics.cellWidth, metrics.cellHeight) * 0.18;
+  const positiveLength = clearsColumn
+    ? (metrics.playableY + metrics.playableHeight) - origin.y
+    : (metrics.playableX + metrics.playableWidth) - origin.x;
+  const negativeLength = clearsColumn
+    ? origin.y - metrics.playableY
+    : origin.x - metrics.playableX;
+  const beamObjects = [];
+
+  const makeBeam = (isPositive) => {
+    const actualLength = Math.max(6, isPositive ? positiveLength : negativeLength);
+    const beam = gameInstance.add.rectangle(
+      origin.x,
+      origin.y,
+      clearsColumn ? beamThickness : actualLength,
+      clearsColumn ? actualLength : beamThickness,
+      theme.secondary,
+      0.82
+    );
+    beam.setDepth(905);
+    if (clearsColumn) {
+      beam.setOrigin(0.5, isPositive ? 0 : 1);
+      beam.setScale(1, 0.02);
+    } else {
+      beam.setOrigin(isPositive ? 0 : 1, 0.5);
+      beam.setScale(0.02, 1);
+    }
+    beamObjects.push(beam);
+
+    const glow = gameInstance.add.rectangle(
+      origin.x,
+      origin.y,
+      clearsColumn ? beamThickness * 2.8 : actualLength,
+      clearsColumn ? actualLength : beamThickness * 2.8,
+      theme.glow,
+      0.22
+    );
+    glow.setDepth(904);
+    if (clearsColumn) {
+      glow.setOrigin(0.5, isPositive ? 0 : 1);
+      glow.setScale(1, 0.02);
+    } else {
+      glow.setOrigin(isPositive ? 0 : 1, 0.5);
+      glow.setScale(0.02, 1);
+    }
+    beamObjects.push(glow);
+
+    const targetScale = clearsColumn ? { scaleY: 1 } : { scaleX: 1 };
+    gameInstance.tweens.add({
+      targets: [beam, glow],
+      ...targetScale,
+      duration: 280,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        gameInstance.tweens.add({
+          targets: [beam, glow],
+          alpha: 0,
+          duration: 90,
+          ease: 'Sine.easeOut',
+        });
+      },
+    });
+  };
+
+  makeBeam(false);
+  makeBeam(true);
+
+  const pulse = gameInstance.add.circle(origin.x, origin.y, beamThickness * 1.15, theme.primary, 0.38);
+  pulse.setDepth(906);
+  beamObjects.push(pulse);
   gameInstance.tweens.add({
-    targets: beam,
+    targets: pulse,
+    scale: 2.6,
     alpha: 0,
-    scaleX: isVerticalBeam ? 1.8 : 1,
-    scaleY: isVerticalBeam ? 1 : 1.8,
     duration: 260,
     ease: 'Cubic.easeOut',
+  });
+
+  affectedCells.forEach((cell) => {
+    const distance = clearsColumn
+      ? Math.abs(cell.row - triggerCell.row)
+      : Math.abs(cell.col - triggerCell.col);
+    createCellImpactFlash(cell, theme, Math.min(260, distance * 46));
+  });
+
+  gameInstance.time.delayedCall(360, () => {
+    beamObjects.forEach((object) => {
+      try { gameInstance.tweens.killTweensOf(object); } catch (e) {}
+      try { object.destroy(); } catch (e) {}
+    });
+    if (!isGameOver && onComplete) onComplete();
+  });
+}
+
+function drawWavyEnergyLink(graphics, start, end, color, alpha, waveOffset) {
+  const segments = 10;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+  const normalX = -dy / distance;
+  const normalY = dx / distance;
+
+  graphics.lineStyle(3, color, alpha);
+  graphics.beginPath();
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const wave = Math.sin(t * Math.PI * 3 + waveOffset) * 8;
+    const x = start.x + dx * t + normalX * wave;
+    const y = start.y + dy * t + normalY * wave;
+    if (i === 0) {
+      graphics.moveTo(x, y);
+    } else {
+      graphics.lineTo(x, y);
+    }
+  }
+  graphics.strokePath();
+}
+
+function playMatch5LinkEffect(triggerCell, affectedCells, eggType, onComplete) {
+  if (!gameInstance) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const theme = getEggDestroyTheme(eggType);
+  const origin = getEggPosition(triggerCell.row, triggerCell.col);
+  const graphics = gameInstance.add.graphics();
+  graphics.setDepth(907);
+  const tempObjects = [graphics];
+
+  const pulse = gameInstance.add.circle(origin.x, origin.y, 24, theme.glow, 0.34);
+  pulse.setDepth(908);
+  tempObjects.push(pulse);
+  gameInstance.tweens.add({
+    targets: pulse,
+    scale: 2.8,
+    alpha: 0,
+    duration: 360,
+    ease: 'Cubic.easeOut',
+  });
+
+  let waveOffset = 0;
+  const redrawLinks = () => {
+    graphics.clear();
+    affectedCells.forEach((cell) => {
+      if (cell.row === triggerCell.row && cell.col === triggerCell.col) {
+        return;
+      }
+      const target = getEggPosition(cell.row, cell.col);
+      drawWavyEnergyLink(graphics, origin, target, theme.primary, 0.74, waveOffset);
+      drawWavyEnergyLink(graphics, origin, target, theme.secondary, 0.28, waveOffset + 1.4);
+    });
+    waveOffset += 0.34;
+  };
+
+  redrawLinks();
+  const redrawTimer = gameInstance.time.addEvent({
+    delay: 45,
+    repeat: 8,
+    callback: redrawLinks,
+  });
+
+  affectedCells.forEach((cell, index) => {
+    createCellImpactFlash(cell, theme, 250 + (index % 4) * 24);
+  });
+
+  gameInstance.tweens.add({
+    targets: graphics,
+    alpha: 0,
+    duration: 190,
+    delay: 400,
+    ease: 'Sine.easeOut',
+  });
+
+  gameInstance.time.delayedCall(560, () => {
+    try { redrawTimer.remove(false); } catch (e) {}
+    tempObjects.forEach((object) => {
+      try { gameInstance.tweens.killTweensOf(object); } catch (e) {}
+      try { object.destroy(); } catch (e) {}
+    });
+    if (!isGameOver && onComplete) onComplete();
+  });
+}
+
+function playAreaExplosionEffect(centerCell, affectedCells, onComplete) {
+  if (!gameInstance) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const centerType = board[centerCell.row] && board[centerCell.row][centerCell.col];
+  const theme = getEggDestroyTheme(centerType);
+  const center = getEggPosition(centerCell.row, centerCell.col);
+  const metrics = getBoardMetrics();
+  const radius = Math.min(metrics.cellWidth, metrics.cellHeight) * 1.55;
+  const tempObjects = [];
+
+  const shockwave = gameInstance.add.circle(center.x, center.y, radius * 0.24, theme.glow, 0.14);
+  shockwave.setStrokeStyle(5, theme.secondary, 0.78);
+  shockwave.setDepth(906);
+  tempObjects.push(shockwave);
+  gameInstance.tweens.add({
+    targets: shockwave,
+    scale: 2.15,
+    alpha: 0,
+    duration: 430,
+    ease: 'Cubic.easeOut',
+  });
+
+  const blast = gameInstance.add.circle(center.x, center.y, radius * 0.64, theme.primary, 0.2);
+  blast.setDepth(905);
+  tempObjects.push(blast);
+  gameInstance.tweens.add({
+    targets: blast,
+    scale: 1.45,
+    alpha: 0,
+    duration: 320,
+    ease: 'Sine.easeOut',
+  });
+
+  for (let i = 0; i < 16; i++) {
+    const angle = (Math.PI * 2 * i) / 16 + Phaser.Math.FloatBetween(-0.16, 0.16);
+    const distance = radius * Phaser.Math.FloatBetween(0.72, 1.18);
+    createDestroyParticle(center.x, center.y, theme, angle, distance, i);
+  }
+
+  affectedCells.forEach((cell, index) => {
+    createCellImpactFlash(cell, theme, 90 + (index % 3) * 32);
+  });
+
+  if (gameInstance.cameras && gameInstance.cameras.main) {
+    gameInstance.cameras.main.shake(120, 0.0035);
+  }
+
+  gameInstance.time.delayedCall(460, () => {
+    tempObjects.forEach((object) => {
+      try { gameInstance.tweens.killTweensOf(object); } catch (e) {}
+      try { object.destroy(); } catch (e) {}
+    });
+    if (!isGameOver && onComplete) onComplete();
+  });
+}
+
+function playChargedAreaExplosionEffect(centerCell, affectedCells, onComplete) {
+  if (!gameInstance) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const sprite = tileSprites[centerCell.row] && tileSprites[centerCell.row][centerCell.col];
+  if (!sprite) {
+    playAreaExplosionEffect(centerCell, affectedCells, onComplete);
+    return;
+  }
+
+  const centerType = board[centerCell.row] && board[centerCell.row][centerCell.col];
+  const theme = getEggDestroyTheme(centerType);
+  const center = getEggPosition(centerCell.row, centerCell.col);
+  const metrics = getBoardMetrics();
+  const chargeRadius = Math.min(metrics.cellWidth, metrics.cellHeight) * 0.44;
+  const originalScaleX = sprite.scaleX;
+  const originalScaleY = sprite.scaleY;
+  const targetScale = getEggScale(sprite, SELECTED_SCALE * 2);
+  const tempObjects = [];
+
+  try { gameInstance.tweens.killTweensOf(sprite); } catch (e) {}
+  try { sprite.disableInteractive(); } catch (e) {}
+  sprite.setDepth(945);
+  sprite.setAlpha(1);
+  sprite.setTint(theme.secondary);
+
+  const chargeGlow = gameInstance.add.circle(center.x, center.y, chargeRadius, theme.glow, 0.2);
+  chargeGlow.setStrokeStyle(4, theme.secondary, 0.56);
+  chargeGlow.setDepth(940);
+  tempObjects.push(chargeGlow);
+  gameInstance.tweens.add({
+    targets: chargeGlow,
+    scale: 2.4,
+    alpha: 0.04,
+    duration: 320,
+    ease: 'Sine.easeInOut',
+  });
+
+  const innerPulse = gameInstance.add.circle(center.x, center.y, chargeRadius * 0.52, theme.primary, 0.24);
+  innerPulse.setDepth(941);
+  tempObjects.push(innerPulse);
+  gameInstance.tweens.add({
+    targets: innerPulse,
+    scale: 1.85,
+    alpha: 0,
+    duration: 150,
+    yoyo: true,
+    repeat: 1,
+    ease: 'Sine.easeInOut',
+  });
+
+  gameInstance.tweens.add({
+    targets: sprite,
+    scaleX: targetScale.x,
+    scaleY: targetScale.y,
+    duration: 310,
+    ease: 'Back.easeOut',
     onComplete: () => {
-      try { beam.destroy(); } catch (e) {}
+      tempObjects.forEach((object) => {
+        try { gameInstance.tweens.killTweensOf(object); } catch (e) {}
+        try { object.destroy(); } catch (e) {}
+      });
+
+      if (isGameOver) {
+        return;
+      }
+
+      sprite.clearTint();
+      sprite.setScale(originalScaleX, originalScaleY);
+      sprite.setAlpha(0.08);
+      if (gameInstance.cameras && gameInstance.cameras.main) {
+        gameInstance.cameras.main.shake(90, 0.0045);
+      }
+      playAreaExplosionEffect(centerCell, affectedCells, () => {
+        if (sprite && sprite.active) {
+          sprite.setAlpha(1);
+          sprite.setScale(originalScaleX, originalScaleY);
+        }
+        if (onComplete) onComplete();
+      });
     },
   });
+}
+
+function playDelayedSpecialActivationEffect(delayedSpecial, triggerCell, destroyedCells, onComplete) {
+  const affectedCells = getCellsFromRemovalSet(destroyedCells);
+  if (!affectedCells.length) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  if (delayedSpecial.type === 'match4') {
+    playMatch4BeamEffect(triggerCell, affectedCells, delayedSpecial.direction, onComplete);
+    return;
+  }
+
+  if (delayedSpecial.type === 'match5') {
+    playMatch5LinkEffect(triggerCell, affectedCells, delayedSpecial.eggType, onComplete);
+    return;
+  }
+
+  if (delayedSpecial.type === 'lshape' || delayedSpecial.type === 'tshape') {
+    playChargedAreaExplosionEffect(triggerCell, affectedCells, onComplete);
+    return;
+  }
+
+  if (onComplete) onComplete();
 }
 
 // Create a floating score popup at pixel position x,y
 function createScorePopup(x, y, text, fontSize = 20) {
   if (!gameInstance) return;
-  const style = { font: `${fontSize}px Arial`, fill: '#fff', stroke: '#000', strokeThickness: 3 };
-  const txt = gameInstance.add.text(x, y, text, style).setOrigin(0.5);
+  const isLeafBoostedScore = leafDoubleScoreActiveForCurrentMove && scoreMultiplier > 1 && typeof text === 'string' && text.startsWith('+');
+  let popupText = text;
+  if (isLeafBoostedScore) {
+    const basePopupScore = Number(text.replace('+', ''));
+    popupText = Number.isFinite(basePopupScore) ? `+${basePopupScore * scoreMultiplier} 🌿` : `${text} 🌿`;
+  }
+  const style = {
+    font: `${fontSize}px Arial`,
+    fill: isLeafBoostedScore ? '#baff8a' : '#fff',
+    stroke: isLeafBoostedScore ? '#173d16' : '#000',
+    strokeThickness: isLeafBoostedScore ? 5 : 3,
+  };
+  const txt = gameInstance.add.text(x, y, popupText, style).setOrigin(0.5);
   txt.setDepth(1000);
   gameInstance.tweens.add({
     targets: txt,
@@ -1194,6 +1679,146 @@ function createScorePopup(x, y, text, fontSize = 20) {
     ease: 'Power1',
     onComplete: () => {
       try { txt.destroy(); } catch (e) {}
+    },
+  });
+}
+
+function getEggDestroyTheme(type) {
+  return EGG_DESTROY_THEMES[type] || EGG_DESTROY_THEMES[0];
+}
+
+function createDestroyParticle(x, y, theme, angle, distance, index) {
+  const particleSize = Phaser.Math.Between(4, 8);
+  let particle;
+
+  if (theme.shape === 'leaf') {
+    particle = gameInstance.add.ellipse(x, y, particleSize * 1.5, particleSize * 0.75, theme.primary, 0.9);
+    particle.setRotation(angle);
+  } else if (theme.shape === 'stone') {
+    particle = gameInstance.add.rectangle(x, y, particleSize, particleSize * 0.8, index % 2 ? theme.primary : theme.secondary, 0.9);
+    particle.setRotation(angle * 0.7);
+  } else if (theme.shape === 'shard') {
+    particle = gameInstance.add.triangle(
+      x,
+      y,
+      0,
+      -particleSize,
+      particleSize * 0.8,
+      particleSize,
+      -particleSize * 0.8,
+      particleSize,
+      index % 2 ? theme.primary : theme.secondary,
+      0.9
+    );
+    particle.setRotation(angle);
+  } else {
+    particle = gameInstance.add.circle(x, y, particleSize * 0.5, index % 2 ? theme.primary : theme.secondary, 0.95);
+  }
+
+  particle.setDepth(940);
+  gameInstance.tweens.add({
+    targets: particle,
+    x: x + Math.cos(angle) * distance,
+    y: y + Math.sin(angle) * distance,
+    alpha: 0,
+    scale: 0.25,
+    duration: Phaser.Math.Between(190, 250),
+    ease: 'Cubic.easeOut',
+    onComplete: () => {
+      try { particle.destroy(); } catch (e) {}
+    },
+  });
+}
+
+function playEggDestroyEffect(entry, onComplete) {
+  if (!gameInstance || !entry.sprite) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const sprite = entry.sprite;
+  const type = entry.eggType !== null && entry.eggType !== undefined ? entry.eggType : sprite.getData('type');
+  const theme = getEggDestroyTheme(type);
+  const x = sprite.x;
+  const y = sprite.y;
+  const metrics = getBoardMetrics();
+  const burstRadius = Math.min(metrics.cellWidth, metrics.cellHeight) * 0.34;
+  const originalScaleX = sprite.scaleX;
+  const originalScaleY = sprite.scaleY;
+  const tempObjects = [];
+
+  try { sprite.disableInteractive(); } catch (e) {}
+  sprite.setDepth(930);
+
+  const flash = gameInstance.add.circle(x, y, burstRadius * 0.62, theme.glow, 0.38);
+  flash.setDepth(928);
+  tempObjects.push(flash);
+  gameInstance.tweens.add({
+    targets: flash,
+    scale: 1.55,
+    alpha: 0,
+    duration: 170,
+    ease: 'Cubic.easeOut',
+  });
+
+  const crack = gameInstance.add.graphics();
+  crack.setDepth(935);
+  crack.lineStyle(2, 0xffffff, 0.9);
+  crack.beginPath();
+  crack.moveTo(x - burstRadius * 0.18, y - burstRadius * 0.34);
+  crack.lineTo(x - burstRadius * 0.04, y - burstRadius * 0.08);
+  crack.lineTo(x - burstRadius * 0.22, y + burstRadius * 0.18);
+  crack.moveTo(x + burstRadius * 0.12, y - burstRadius * 0.28);
+  crack.lineTo(x + burstRadius * 0.02, y + burstRadius * 0.02);
+  crack.lineTo(x + burstRadius * 0.24, y + burstRadius * 0.3);
+  crack.moveTo(x - burstRadius * 0.02, y + burstRadius * 0.02);
+  crack.lineTo(x + burstRadius * 0.28, y - burstRadius * 0.08);
+  crack.strokePath();
+  tempObjects.push(crack);
+  gameInstance.tweens.add({
+    targets: crack,
+    alpha: 0,
+    duration: 140,
+    ease: 'Sine.easeOut',
+  });
+
+  const particleCount = 7;
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount + Phaser.Math.FloatBetween(-0.24, 0.24);
+    const distance = burstRadius * Phaser.Math.FloatBetween(0.75, 1.28);
+    createDestroyParticle(x, y, theme, angle, distance, i);
+  }
+
+  gameInstance.tweens.add({
+    targets: sprite,
+    scaleX: originalScaleX * 1.18,
+    scaleY: originalScaleY * 1.18,
+    duration: 75,
+    ease: 'Back.easeOut',
+    onComplete: () => {
+      if (isGameOver) {
+        tempObjects.forEach((object) => {
+          try { object.destroy(); } catch (e) {}
+        });
+        if (onComplete) onComplete();
+        return;
+      }
+
+      sprite.setTint(theme.secondary);
+      gameInstance.tweens.add({
+        targets: sprite,
+        scaleX: originalScaleX * 0.12,
+        scaleY: originalScaleY * 0.12,
+        alpha: 0,
+        duration: EGG_DESTROY_DURATION - 75,
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+          tempObjects.forEach((object) => {
+            try { object.destroy(); } catch (e) {}
+          });
+          if (onComplete) onComplete();
+        },
+      });
     },
   });
 }
@@ -1221,7 +1846,12 @@ function animateRemovals(removalSet, onComplete, options = {}) {
   deselectEgg();
   const toRemove = Array.from(removalSet).map((key) => {
     const [row, col] = key.split('-').map(Number);
-    return { row, col, sprite: tileSprites[row] && tileSprites[row][col] ? tileSprites[row][col] : null };
+    return {
+      row,
+      col,
+      eggType: board[row] && board[row][col],
+      sprite: tileSprites[row] && tileSprites[row][col] ? tileSprites[row][col] : null,
+    };
   });
 
   if (toRemove.length === 0) {
@@ -1250,42 +1880,35 @@ function animateRemovals(removalSet, onComplete, options = {}) {
   let done = 0;
   toRemove.forEach((entry) => {
     if (entry.sprite) {
-      gameInstance.tweens.add({
-        targets: entry.sprite,
-        scale: 0,
-        alpha: 0,
-        duration: 180,
-        ease: 'Power1',
-        onComplete: () => {
+      playEggDestroyEffect(entry, () => {
+        if (isGameOver) {
+          console.log('Resolve stopped because game over');
+          return;
+        }
+
+        try { entry.sprite.destroy(); } catch (e) {}
+        tileSprites[entry.row][entry.col] = null;
+        done += 1;
+        if (done === toRemove.length) {
+          applyRemovals(removalSet);
           if (isGameOver) {
             console.log('Resolve stopped because game over');
             return;
           }
-
-          try { entry.sprite.destroy(); } catch (e) {}
-          tileSprites[entry.row][entry.col] = null;
-          done += 1;
-          if (done === toRemove.length) {
-            applyRemovals(removalSet);
+          applyGravity(() => {
             if (isGameOver) {
               console.log('Resolve stopped because game over');
               return;
             }
-            applyGravity(() => {
+            refillBoard(() => {
               if (isGameOver) {
                 console.log('Resolve stopped because game over');
                 return;
               }
-              refillBoard(() => {
-                if (isGameOver) {
-                  console.log('Resolve stopped because game over');
-                  return;
-                }
-                console.log('gravity and refill complete');
-                if (onComplete) onComplete();
-              });
+              console.log('gravity and refill complete');
+              if (onComplete) onComplete();
             });
-          }
+          });
         }
       });
     } else {
@@ -1664,6 +2287,405 @@ function pulseDragonEnergyReady(index) {
   }, 650);
 }
 
+function cancelActiveDragonCutIn() {
+  dragonCutInToken += 1;
+  if (activeDragonCutIn && activeDragonCutIn.cleanup) {
+    activeDragonCutIn.cleanup();
+  }
+  activeDragonCutIn = null;
+}
+
+async function playDragonCutIn(dragonType, title) {
+  if (!gameInstance || isGameOver) {
+    return;
+  }
+
+  const cutInConfig = DRAGON_CUT_IN_CONFIGS[dragonType] || {
+    dragonType,
+    title,
+    portraitKey: '',
+    visualStyle: 'default',
+    accentColor: 0xffffff,
+    overlayColor: 0x050309,
+    flashColor: 0xffffff,
+    flashAlpha: 0.72,
+    titleColor: '#ffffff',
+  };
+  const cutInTitle = title || cutInConfig.title;
+  const token = ++dragonCutInToken;
+  const wasAnimating = isAnimating;
+  isAnimating = true;
+  disableBoardInput();
+
+  return new Promise((resolve) => {
+    const centerX = BOARD_RENDER_WIDTH / 2;
+    const centerY = BOARD_RENDER_HEIGHT / 2;
+    const objects = [];
+    const timers = [];
+    let finished = false;
+
+    const overlay = gameInstance.add.rectangle(centerX, centerY, BOARD_RENDER_WIDTH, BOARD_RENDER_HEIGHT, cutInConfig.overlayColor, 0.82);
+    overlay.setDepth(3000);
+    objects.push(overlay);
+
+    const slash = gameInstance.add.rectangle(centerX, centerY + 8, BOARD_RENDER_WIDTH * 1.25, 128, cutInConfig.accentColor, 0.32);
+    slash.setAngle(-8);
+    slash.setDepth(3001);
+    objects.push(slash);
+
+    if (cutInConfig.visualStyle === 'ice') {
+      for (let i = 0; i < 7; i++) {
+        const frostLine = gameInstance.add.rectangle(
+          centerX - BOARD_RENDER_WIDTH * 0.42 + i * 84,
+          centerY - 168 + (i % 3) * 74,
+          14,
+          4,
+          0xcff7ff,
+          0.68
+        );
+        frostLine.setAngle(-28 + i * 9);
+        frostLine.setDepth(3002);
+        frostLine.setScale(0.2, 1);
+        objects.push(frostLine);
+        gameInstance.tweens.add({
+          targets: frostLine,
+          scaleX: 11,
+          alpha: 0,
+          duration: 780,
+          delay: i * 38,
+          ease: 'Cubic.easeOut',
+        });
+      }
+
+      for (let i = 0; i < 4; i++) {
+        const frostRing = gameInstance.add.circle(
+          centerX + (i - 1.5) * 120,
+          centerY + (i % 2 === 0 ? 118 : -118),
+          18,
+          0xdff6ff,
+          0.18
+        );
+        frostRing.setStrokeStyle(2, 0xdff6ff, 0.58);
+        frostRing.setDepth(3002);
+        objects.push(frostRing);
+        gameInstance.tweens.add({
+          targets: frostRing,
+          scale: 4.2,
+          alpha: 0,
+          duration: 880,
+          delay: 80 + i * 70,
+          ease: 'Sine.easeOut',
+        });
+      }
+    }
+
+    if (cutInConfig.visualStyle === 'leaf') {
+      for (let i = 0; i < 9; i++) {
+        const startX = -80 - i * 28;
+        const startY = 46 + (i % 4) * 72;
+        const leaf = gameInstance.add.ellipse(startX, startY, 34, 16, 0x9cff7a, 0.72);
+        leaf.setAngle(-34 + i * 11);
+        leaf.setDepth(3002);
+        objects.push(leaf);
+        gameInstance.tweens.add({
+          targets: leaf,
+          x: BOARD_RENDER_WIDTH + 92,
+          y: startY + 210 + (i % 3) * 18,
+          angle: leaf.angle + 130,
+          alpha: 0,
+          duration: 860,
+          delay: i * 42,
+          ease: 'Sine.easeInOut',
+        });
+      }
+
+      const glowPulse = gameInstance.add.circle(centerX, centerY, 90, 0x72ff66, 0.12);
+      glowPulse.setDepth(3002);
+      objects.push(glowPulse);
+      gameInstance.tweens.add({
+        targets: glowPulse,
+        scale: 4.8,
+        alpha: 0,
+        duration: 900,
+        ease: 'Sine.easeOut',
+      });
+    }
+
+    if (cutInConfig.visualStyle === 'earth') {
+      const impactPulse = gameInstance.add.circle(centerX, centerY + 28, 70, 0xd8aa55, 0.14);
+      impactPulse.setDepth(3002);
+      objects.push(impactPulse);
+      gameInstance.tweens.add({
+        targets: impactPulse,
+        scale: 4.4,
+        alpha: 0,
+        duration: 760,
+        ease: 'Cubic.easeOut',
+      });
+
+      for (let i = 0; i < 8; i++) {
+        const rock = gameInstance.add.polygon(
+          centerX - 230 + i * 66,
+          -28 - (i % 2) * 36,
+          [
+            -14, -10,
+            6, -16,
+            18, 2,
+            4, 17,
+            -16, 9,
+          ],
+          0x8d6742,
+          0.82
+        );
+        rock.setStrokeStyle(2, 0xd8aa55, 0.32);
+        rock.setAngle(i * 19);
+        rock.setDepth(3002);
+        objects.push(rock);
+        gameInstance.tweens.add({
+          targets: rock,
+          y: centerY + 184 + (i % 3) * 22,
+          angle: rock.angle + 160,
+          alpha: 0,
+          duration: 760,
+          delay: i * 38,
+          ease: 'Quad.easeIn',
+        });
+      }
+
+      for (let i = 0; i < 6; i++) {
+        const crack = gameInstance.add.rectangle(
+          centerX - 190 + i * 76,
+          centerY + 122 + (i % 2) * 22,
+          78,
+          5,
+          0xe0c068,
+          0.58
+        );
+        crack.setAngle(i % 2 === 0 ? -16 : 14);
+        crack.setDepth(3002);
+        crack.setScale(0.1, 1);
+        objects.push(crack);
+        gameInstance.tweens.add({
+          targets: crack,
+          scaleX: 1,
+          alpha: 0,
+          duration: 520,
+          delay: 120 + i * 45,
+          ease: 'Cubic.easeOut',
+        });
+      }
+
+      if (gameInstance.cameras && gameInstance.cameras.main) {
+        gameInstance.cameras.main.shake(170, 0.006);
+      }
+    }
+
+    if (cutInConfig.visualStyle === 'fire') {
+      const heatGlow = gameInstance.add.rectangle(centerX, centerY, BOARD_RENDER_WIDTH, BOARD_RENDER_HEIGHT, 0xff3b00, 0.16);
+      heatGlow.setDepth(3002);
+      objects.push(heatGlow);
+      gameInstance.tweens.add({
+        targets: heatGlow,
+        alpha: 0.34,
+        duration: 240,
+        yoyo: true,
+        repeat: 1,
+        ease: 'Sine.easeInOut',
+      });
+
+      for (let i = 0; i < 8; i++) {
+        const flame = gameInstance.add.triangle(
+          18 + i * 82,
+          BOARD_RENDER_HEIGHT + 42,
+          0,
+          74,
+          28,
+          0,
+          56,
+          74,
+          i % 2 === 0 ? 0xff4d00 : 0xffb31a,
+          0.82
+        );
+        flame.setDepth(3003);
+        flame.setScale(1, 0.8 + (i % 3) * 0.18);
+        objects.push(flame);
+        gameInstance.tweens.add({
+          targets: flame,
+          y: BOARD_RENDER_HEIGHT * 0.46 + (i % 2) * 22,
+          scaleY: flame.scaleY * 2.25,
+          alpha: 0,
+          duration: 560,
+          delay: 60 + i * 22,
+          ease: 'Cubic.easeOut',
+        });
+      }
+
+      for (let i = 0; i < 6; i++) {
+        const heatLine = gameInstance.add.rectangle(
+          centerX - 240 + i * 96,
+          centerY - 180 + (i % 3) * 130,
+          8,
+          110,
+          0xffa02a,
+          0.2
+        );
+        heatLine.setDepth(3002);
+        heatLine.setAngle(-8);
+        objects.push(heatLine);
+        gameInstance.tweens.add({
+          targets: heatLine,
+          x: heatLine.x + (i % 2 === 0 ? 18 : -18),
+          alpha: 0,
+          duration: 680,
+          yoyo: true,
+          ease: 'Sine.easeInOut',
+        });
+      }
+
+      const shockwave = gameInstance.add.circle(centerX + 112, centerY - 8, 34, 0xff7a1a, 0.12);
+      shockwave.setStrokeStyle(4, 0xffbf42, 0.62);
+      shockwave.setDepth(3003);
+      objects.push(shockwave);
+      gameInstance.tweens.add({
+        targets: shockwave,
+        scale: 5.6,
+        alpha: 0,
+        duration: 520,
+        delay: 260,
+        ease: 'Cubic.easeOut',
+      });
+    }
+
+    let portrait;
+    if (cutInConfig.portraitKey && gameInstance.textures.exists(cutInConfig.portraitKey)) {
+      portrait = gameInstance.add.image(centerX - 112, centerY + 8, cutInConfig.portraitKey);
+      const maxPortraitHeight = BOARD_RENDER_HEIGHT * 0.74;
+      const maxPortraitWidth = BOARD_RENDER_WIDTH * 0.48;
+      const scale = Math.min(maxPortraitWidth / portrait.width, maxPortraitHeight / portrait.height);
+      portrait.setScale(scale * 0.72);
+    } else {
+      portrait = gameInstance.add.circle(centerX - 112, centerY + 8, 92, cutInConfig.accentColor, 0.88);
+      const fallbackText = gameInstance.add.text(centerX - 112, centerY + 8, dragonType.slice(0, 1).toUpperCase(), {
+        font: '82px Arial',
+        fill: '#ffffff',
+        stroke: '#160806',
+        strokeThickness: 8,
+      }).setOrigin(0.5);
+      fallbackText.setDepth(3003);
+      objects.push(fallbackText);
+    }
+    portrait.setAlpha(0);
+    portrait.setDepth(3002);
+    objects.push(portrait);
+
+    const titleFontSize = cutInTitle.length > 22 ? 28 : cutInTitle.length > 18 ? 32 : 46;
+    const titleText = gameInstance.add.text(centerX + 88, centerY - 8, cutInTitle, {
+      font: `${titleFontSize}px Arial, sans-serif`,
+      fill: cutInConfig.titleColor,
+      stroke: '#160806',
+      strokeThickness: 8,
+      align: 'center',
+      wordWrap: { width: BOARD_RENDER_WIDTH * 0.5, useAdvancedWrap: true },
+    }).setOrigin(0.5);
+    titleText.setAlpha(0);
+    titleText.setDepth(3004);
+    objects.push(titleText);
+
+    const flash = gameInstance.add.rectangle(centerX, centerY, BOARD_RENDER_WIDTH, BOARD_RENDER_HEIGHT, cutInConfig.flashColor, 0);
+    flash.setDepth(3010);
+    objects.push(flash);
+
+    gameInstance.tweens.add({
+      targets: overlay,
+      alpha: 0.82,
+      duration: DRAGON_CUT_IN_TIMING.overlayIn,
+      ease: 'Cubic.easeOut',
+    });
+    gameInstance.tweens.add({
+      targets: slash,
+      x: centerX + 28,
+      alpha: 0.48,
+      duration: DRAGON_CUT_IN_TIMING.accentSweep,
+      yoyo: true,
+      ease: 'Cubic.easeOut',
+    });
+    const isFireCutIn = cutInConfig.visualStyle === 'fire';
+    gameInstance.tweens.add({
+      targets: portrait,
+      alpha: 1,
+      scaleX: portrait.scaleX * (isFireCutIn ? 1.48 : 1.28),
+      scaleY: portrait.scaleY * (isFireCutIn ? 1.48 : 1.28),
+      x: isFireCutIn ? centerX - 62 : centerX - 78,
+      y: isFireCutIn ? centerY - 2 : portrait.y,
+      duration: isFireCutIn ? DRAGON_CUT_IN_TIMING.firePortraitIn : DRAGON_CUT_IN_TIMING.portraitIn,
+      ease: 'Back.easeOut',
+    });
+    gameInstance.tweens.add({
+      targets: titleText,
+      alpha: 1,
+      x: isFireCutIn ? centerX + 126 : centerX + 118,
+      scaleX: isFireCutIn ? 1.22 : 1,
+      scaleY: isFireCutIn ? 1.22 : 1,
+      duration: isFireCutIn ? DRAGON_CUT_IN_TIMING.fireTitleIn : DRAGON_CUT_IN_TIMING.titleIn,
+      delay: isFireCutIn ? DRAGON_CUT_IN_TIMING.fireTitleDelay : DRAGON_CUT_IN_TIMING.titleDelay,
+      yoyo: isFireCutIn,
+      ease: isFireCutIn ? 'Back.easeOut' : 'Cubic.easeOut',
+    });
+
+    timers.push(gameInstance.time.delayedCall(DRAGON_CUT_IN_TIMING.flashAt, () => {
+      if (isGameOver || token !== dragonCutInToken) {
+        return;
+      }
+      gameInstance.tweens.add({
+        targets: flash,
+        alpha: cutInConfig.flashAlpha,
+        duration: DRAGON_CUT_IN_TIMING.flashDuration,
+        yoyo: true,
+        ease: 'Quad.easeOut',
+      });
+    }));
+
+    timers.push(gameInstance.time.delayedCall(DRAGON_CUT_IN_TIMING.exitAt, () => {
+      if (isGameOver || token !== dragonCutInToken) {
+        return;
+      }
+      objects.forEach((object) => {
+        gameInstance.tweens.add({
+          targets: object,
+          alpha: 0,
+          duration: DRAGON_CUT_IN_TIMING.exitDuration,
+          ease: 'Cubic.easeIn',
+        });
+      });
+    }));
+
+    const cleanup = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      timers.forEach((timerEvent) => {
+        try { timerEvent.remove(false); } catch (e) {}
+      });
+      objects.forEach((object) => {
+        try { gameInstance.tweens.killTweensOf(object); } catch (e) {}
+        try { object.destroy(); } catch (e) {}
+      });
+      if (activeDragonCutIn && activeDragonCutIn.token === token) {
+        activeDragonCutIn = null;
+      }
+      isAnimating = wasAnimating;
+      if (!wasAnimating && !isGameOver) {
+        enableBoardInput();
+      }
+      resolve();
+    };
+
+    activeDragonCutIn = { token, cleanup };
+    timers.push(gameInstance.time.delayedCall(DRAGON_CUT_IN_TIMING.total, cleanup));
+  });
+}
+
 function getRandomBoardCell() {
   const validCells = [];
   for (let row = 0; row < GRID_SIZE; row++) {
@@ -1719,7 +2741,6 @@ function applyPendingFireStorm(destroyedCells) {
         newStormDestroyed += 1;
       }
     });
-    showFireStormEffect(topLeft);
   });
 
   console.log('Fire Storm destroyed eggs', newStormDestroyed);
@@ -1738,35 +2759,163 @@ function showFireStormEffect(topLeft) {
   const x = (first.x + second.x) / 2;
   const y = (first.y + second.y) / 2;
 
-  const explosion = gameInstance.add.circle(x, y, 24, 0xff6600, 0.75);
-  explosion.setDepth(900);
+  const metrics = getBoardMetrics();
+  const radius = Math.min(metrics.cellWidth, metrics.cellHeight) * 0.72;
+  const explosion = gameInstance.add.circle(x, y, radius * 0.42, 0xff6600, 0.78);
+  explosion.setDepth(1120);
+  explosion.setStrokeStyle(5, 0xfff0a0, 0.74);
   gameInstance.tweens.add({
     targets: explosion,
-    scale: 2.4,
+    scale: 2.2,
     alpha: 0,
-    duration: 420,
+    duration: 330,
     ease: 'Cubic.easeOut',
     onComplete: () => {
       try { explosion.destroy(); } catch (e) {}
     },
   });
 
-  const stormText = gameInstance.add.text(x, y - 16, 'Fire Storm!', {
-    font: '28px Arial',
-    fill: '#ffbf00',
-    stroke: '#300000',
-    strokeThickness: 6,
-  }).setOrigin(0.5);
-  stormText.setDepth(1000);
+  const flash = gameInstance.add.rectangle(x, y, metrics.cellWidth * 2.1, metrics.cellHeight * 2.1, 0xfff0a0, 0.36);
+  flash.setDepth(1118);
   gameInstance.tweens.add({
-    targets: stormText,
-    y: y - 48,
+    targets: flash,
     alpha: 0,
-    duration: 1000,
-    ease: 'Power1',
+    scale: 1.28,
+    duration: 170,
+    ease: 'Quad.easeOut',
     onComplete: () => {
-      try { stormText.destroy(); } catch (e) {}
+      try { flash.destroy(); } catch (e) {}
     },
+  });
+
+  for (let i = 0; i < 14; i++) {
+    const angle = (Math.PI * 2 * i) / 14 + Phaser.Math.FloatBetween(-0.18, 0.18);
+    const distance = radius * Phaser.Math.FloatBetween(0.78, 1.32);
+    createDestroyParticle(x, y, getEggDestroyTheme(0), angle, distance, i);
+  }
+
+  if (gameInstance.cameras && gameInstance.cameras.main) {
+    gameInstance.cameras.main.shake(90, 0.0045);
+  }
+}
+
+function getFireStormImpactCenter(topLeft) {
+  const first = getEggPosition(topLeft.row, topLeft.col);
+  const second = getEggPosition(topLeft.row + 1, topLeft.col + 1);
+  return {
+    x: (first.x + second.x) / 2,
+    y: (first.y + second.y) / 2,
+  };
+}
+
+function createFireMeteorShape(x, y) {
+  const meteor = gameInstance.add.container(x, y);
+  meteor.setDepth(1115);
+
+  const trail = gameInstance.add.triangle(-26, -38, 0, 0, 34, -112, 58, -18, 0xff4a00, 0.52);
+  trail.setAngle(-22);
+  const outer = gameInstance.add.circle(0, 0, 20, 0xff3b00, 0.95);
+  outer.setStrokeStyle(4, 0xffb31a, 0.88);
+  const core = gameInstance.add.circle(-3, -4, 10, 0xfff0a0, 0.88);
+  meteor.add([trail, outer, core]);
+  meteor.setRotation(0.72);
+  return meteor;
+}
+
+function playFireMeteorImpactEffect(topLeft, delay = 0, expectedToken = dragonCutInToken) {
+  if (!gameInstance) return;
+
+  const metrics = getBoardMetrics();
+  const impact = getFireStormImpactCenter(topLeft);
+  const markerSize = Math.min(metrics.cellWidth, metrics.cellHeight) * 1.72;
+  const marker = gameInstance.add.circle(impact.x, impact.y, markerSize * 0.46, 0xff3b00, 0.14);
+  marker.setStrokeStyle(4, 0xffbf42, 0.88);
+  marker.setDepth(1100);
+  marker.setScale(0.72);
+  gameInstance.tweens.add({
+    targets: marker,
+    scale: 1.12,
+    alpha: 0.78,
+    duration: 150,
+    yoyo: true,
+    repeat: 1,
+    delay,
+    ease: 'Sine.easeInOut',
+  });
+
+  const reticle = gameInstance.add.rectangle(impact.x, impact.y, markerSize, markerSize, 0xff2a00, 0.1);
+  reticle.setStrokeStyle(3, 0xfff0a0, 0.76);
+  reticle.setDepth(1101);
+  reticle.setScale(0.88);
+  gameInstance.tweens.add({
+    targets: reticle,
+    angle: 28,
+    scale: 1.06,
+    alpha: 0.42,
+    duration: 300,
+    delay,
+    ease: 'Sine.easeInOut',
+  });
+
+  const startX = impact.x - metrics.cellWidth * 1.75;
+  const startY = -metrics.cellHeight * 1.25;
+  const meteor = createFireMeteorShape(startX, startY);
+  meteor.setAlpha(0);
+
+  gameInstance.time.delayedCall(delay + 285, () => {
+    if (isGameOver || expectedToken !== dragonCutInToken) {
+      try { gameInstance.tweens.killTweensOf(marker); } catch (e) {}
+      try { gameInstance.tweens.killTweensOf(reticle); } catch (e) {}
+      try { marker.destroy(); } catch (e) {}
+      try { reticle.destroy(); } catch (e) {}
+      try { meteor.destroy(); } catch (e) {}
+      return;
+    }
+
+    meteor.setAlpha(1);
+    gameInstance.tweens.add({
+      targets: meteor,
+      x: impact.x,
+      y: impact.y,
+      scale: 1.22,
+      duration: 390,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        try { marker.destroy(); } catch (e) {}
+        try { reticle.destroy(); } catch (e) {}
+        try { meteor.destroy(); } catch (e) {}
+        if (isGameOver || expectedToken !== dragonCutInToken) {
+          return;
+        }
+        showFireStormEffect(topLeft);
+      },
+    });
+
+    gameInstance.tweens.add({
+      targets: meteor,
+      angle: 28,
+      duration: 390,
+      ease: 'Sine.easeInOut',
+    });
+  });
+}
+
+function playFireMeteorSequence(onComplete, expectedToken = dragonCutInToken) {
+  if (!gameInstance || !pendingFireStorm || !pendingFireStorm.explosions) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const explosions = pendingFireStorm.explosions.slice();
+  explosions.forEach((topLeft, index) => {
+    playFireMeteorImpactEffect(topLeft, index * 150, expectedToken);
+  });
+
+  gameInstance.time.delayedCall(980, () => {
+    if (expectedToken !== dragonCutInToken) {
+      return;
+    }
+    if (onComplete) onComplete();
   });
 }
 
@@ -1874,6 +3023,27 @@ function queueDragonSkill(type) {
   return true;
 }
 
+function sortPendingDragonSkillsByPriority() {
+  console.log('Pending dragon skills before sort', pendingDragonSkills.slice());
+  pendingDragonSkills.sort((a, b) => {
+    const priorityA = DRAGON_SKILL_PRIORITY[a] || Number.MAX_SAFE_INTEGER;
+    const priorityB = DRAGON_SKILL_PRIORITY[b] || Number.MAX_SAFE_INTEGER;
+    return priorityA - priorityB;
+  });
+  console.log('Pending dragon skills after priority sort', pendingDragonSkills.slice());
+}
+
+function finishDragonSkillQueueIfIdle() {
+  if (pendingDragonSkills.length || pendingFireStorm || pendingEarthPetrify || earthPetrifyTimeout || isGameOver) {
+    return;
+  }
+
+  finishLeafScoreForSuccessfulMove();
+  unlockAllDragonEnergy();
+  isAnimating = false;
+  enableBoardInput();
+}
+
 function activatePendingDragonSkills(isFinalResolution = false) {
   if (isGameOver) {
     return false;
@@ -1889,36 +3059,87 @@ function activatePendingDragonSkills(isFinalResolution = false) {
   }
 
   console.log('Activating pending dragon skills');
+  sortPendingDragonSkillsByPriority();
   while (pendingDragonSkills.length && !isGameOver) {
     const skillType = pendingDragonSkills.shift();
     console.log('Pending skill activated:', skillType);
-    console.log('Skill activated', skillType);
-    resetDragonEnergyAfterActivation(skillType);
+    console.log('Activating dragon skill by priority:', skillType);
 
     if (skillType === 'fire') {
-      activateFireDragonSkill();
-      if (pendingFireStorm) {
-        resolveBoard(true);
-        return true;
-      }
-      continue;
+      const cutInToken = dragonCutInToken + 1;
+      playDragonCutIn('fire', DRAGON_CUT_IN_CONFIGS.fire.title).then(() => {
+        if (isGameOver || cutInToken !== dragonCutInToken) {
+          return;
+        }
+
+        console.log('Skill activated', skillType);
+        resetDragonEnergyAfterActivation(skillType);
+        activateFireDragonSkill();
+        if (pendingFireStorm) {
+          playFireMeteorSequence(() => {
+            if (!isGameOver) {
+              resolveBoard(true);
+            }
+          }, cutInToken);
+        }
+      });
+      return true;
     }
 
     if (skillType === 'ice') {
-      activateIceDragonSkill();
-      continue;
+      const cutInToken = dragonCutInToken + 1;
+      playDragonCutIn('ice', DRAGON_CUT_IN_CONFIGS.ice.title).then(() => {
+        if (isGameOver || cutInToken !== dragonCutInToken) {
+          return;
+        }
+
+        console.log('Skill activated', skillType);
+        resetDragonEnergyAfterActivation(skillType);
+        activateIceDragonSkill();
+        if (pendingDragonSkills.length && activatePendingDragonSkills(true)) {
+          return;
+        }
+        finishDragonSkillQueueIfIdle();
+      });
+      return true;
     }
 
     if (skillType === 'leaf') {
-      activateLeafDragonSkill();
-      continue;
+      const cutInToken = dragonCutInToken + 1;
+      playDragonCutIn('leaf', DRAGON_CUT_IN_CONFIGS.leaf.title).then(() => {
+        if (isGameOver || cutInToken !== dragonCutInToken) {
+          return;
+        }
+
+        console.log('Skill activated', skillType);
+        resetDragonEnergyAfterActivation(skillType);
+        playLeafBuffSweep(() => {
+          if (isGameOver || cutInToken !== dragonCutInToken) {
+            return;
+          }
+
+          activateLeafDragonSkill();
+          if (pendingDragonSkills.length && activatePendingDragonSkills(true)) {
+            return;
+          }
+          finishDragonSkillQueueIfIdle();
+        });
+      });
+      return true;
     }
 
     if (skillType === 'earth') {
-      activateEarthDragonSkill();
-      if (pendingEarthPetrify || earthPetrifyTimeout) {
-        return true;
-      }
+      const cutInToken = dragonCutInToken + 1;
+      playDragonCutIn('earth', DRAGON_CUT_IN_CONFIGS.earth.title).then(() => {
+        if (isGameOver || cutInToken !== dragonCutInToken) {
+          return;
+        }
+
+        console.log('Skill activated', skillType);
+        resetDragonEnergyAfterActivation(skillType);
+        activateEarthDragonSkill();
+      });
+      return true;
     }
   }
 
@@ -1957,29 +3178,40 @@ function runPendingEarthPetrify() {
     return;
   }
 
+  const petrifyToken = ++earthPetrifyToken;
   pendingEarthPetrify = false;
   isAnimating = true;
   deselectEgg();
 
-  const convertedEggs = convertRandomEggsToEarth(10);
+  const convertedEggs = selectRandomEggsForEarthConversion(10);
   console.log('Earth Dragon: converted eggs');
   convertedEggs.forEach((egg) => {
     console.log('row, col', egg.row, egg.col);
   });
 
-  showPetrifyEffect(convertedEggs);
   comboCount = 1;
   updateUi();
   pulseCombo();
 
-  earthPetrifyTimeout = setTimeout(() => {
-    earthPetrifyTimeout = null;
-    if (isGameOver) {
+  showPetrifyEffect(convertedEggs, petrifyToken, () => {
+    if (isGameOver || petrifyToken !== earthPetrifyToken) {
       console.log('Resolve stopped because game over');
       return;
     }
-    clearAllEarthEggsFromPetrify();
-  }, 500);
+
+    earthPetrifyTimeout = setTimeout(() => {
+      earthPetrifyTimeout = null;
+      if (isGameOver || petrifyToken !== earthPetrifyToken) {
+        console.log('Resolve stopped because game over');
+        return;
+      }
+
+      if (gameInstance && gameInstance.cameras && gameInstance.cameras.main) {
+        gameInstance.cameras.main.shake(120, 0.004);
+      }
+      clearAllEarthEggsFromPetrify();
+    }, EARTH_CONVERSION_HOLD);
+  });
 }
 
 function clearAllEarthEggsFromPetrify() {
@@ -2015,7 +3247,7 @@ function clearAllEarthEggsFromPetrify() {
   }, { source: 'dragonSkill' });
 }
 
-function convertRandomEggsToEarth(limit) {
+function selectRandomEggsForEarthConversion(limit) {
   const candidates = [];
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
@@ -2026,20 +3258,14 @@ function convertRandomEggsToEarth(limit) {
   }
 
   Phaser.Utils.Array.Shuffle(candidates);
-  const convertedEggs = candidates.slice(0, limit);
-  convertedEggs.forEach((egg) => {
-    board[egg.row][egg.col] = EARTH_TYPE;
-    const sprite = ensureSpriteAt(egg.row, egg.col);
-    sprite.setData('type', EARTH_TYPE);
-    sprite.setTexture(getEggTextureKey(EARTH_TYPE));
-    setEggDisplaySize(sprite);
-  });
-
-  return convertedEggs;
+  return candidates.slice(0, limit);
 }
 
-function showPetrifyEffect(convertedEggs) {
-  if (!gameInstance) return;
+function showPetrifyEffect(convertedEggs, expectedToken, onComplete) {
+  if (!gameInstance) {
+    if (onComplete) onComplete();
+    return;
+  }
 
   const metrics = getBoardMetrics();
   const boardCenter = getPlayableBoardCenter();
@@ -2064,42 +3290,260 @@ function showPetrifyEffect(convertedEggs) {
     },
   });
 
-  const petrifyText = gameInstance.add.text(centerX, centerY - 18, 'Petrify!', {
-    font: '34px Arial',
-    fill: '#d8aa55',
-    stroke: '#2f1d0f',
-    strokeThickness: 7,
-  }).setOrigin(0.5);
-  petrifyText.setDepth(1000);
-  gameInstance.tweens.add({
-    targets: petrifyText,
-    y: centerY - 62,
-    alpha: 0,
-    duration: 1000,
-    ease: 'Power1',
-    onComplete: () => {
-      try { petrifyText.destroy(); } catch (e) {}
-    },
+  if (!convertedEggs.length) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  let completed = 0;
+  let conversionComplete = false;
+  const totalDuration = (convertedEggs.length - 1) * EARTH_CONVERSION_STAGGER + 280;
+  const finishConversion = () => {
+    if (conversionComplete) {
+      return;
+    }
+
+    conversionComplete = true;
+    if (onComplete) {
+      onComplete();
+    }
+  };
+  const finishOne = () => {
+    completed += 1;
+    if (completed === convertedEggs.length) {
+      finishConversion();
+    }
+  };
+
+  convertedEggs.forEach((egg, index) => {
+    const delay = index * EARTH_CONVERSION_STAGGER;
+    gameInstance.time.delayedCall(delay, () => {
+      if (isGameOver || expectedToken !== earthPetrifyToken) {
+        return;
+      }
+
+      const sprite = tileSprites[egg.row] && tileSprites[egg.row][egg.col];
+      if (!sprite || board[egg.row][egg.col] === null || board[egg.row][egg.col] === undefined) {
+        finishOne();
+        return;
+      }
+
+      const position = getEggPosition(egg.row, egg.col);
+      const theme = getEggDestroyTheme(EARTH_TYPE);
+      const dustRadius = Math.min(metrics.cellWidth, metrics.cellHeight) * 0.28;
+      const glow = gameInstance.add.circle(position.x, position.y, dustRadius, theme.glow, 0.26);
+      glow.setDepth(918);
+      gameInstance.tweens.add({
+        targets: glow,
+        scale: 2.1,
+        alpha: 0,
+        duration: 260,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          try { glow.destroy(); } catch (e) {}
+        },
+      });
+
+      for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 * i) / 5 + Phaser.Math.FloatBetween(-0.25, 0.25);
+        const distance = dustRadius * Phaser.Math.FloatBetween(0.85, 1.4);
+        createDestroyParticle(position.x, position.y, theme, angle, distance, i);
+      }
+
+      try { gameInstance.tweens.killTweensOf(sprite); } catch (e) {}
+      sprite.setDepth(925);
+      sprite.setTint(0xc49a5c);
+      const petrifyScale = getEggScale(sprite, 1.28);
+      gameInstance.tweens.add({
+        targets: sprite,
+        scaleX: petrifyScale.x,
+        scaleY: petrifyScale.y,
+        duration: 135,
+        ease: 'Back.easeOut',
+        onComplete: () => {
+          if (isGameOver || expectedToken !== earthPetrifyToken) {
+            finishOne();
+            return;
+          }
+
+          board[egg.row][egg.col] = EARTH_TYPE;
+          sprite.setData('type', EARTH_TYPE);
+          sprite.setTexture(getEggTextureKey(EARTH_TYPE));
+          setEggDisplaySize(sprite);
+          sprite.setTint(0xe0c068);
+          gameInstance.tweens.add({
+            targets: sprite,
+            scaleX: getEggScale(sprite, 1.12).x,
+            scaleY: getEggScale(sprite, 1.12).y,
+            duration: 95,
+            yoyo: true,
+            ease: 'Sine.easeInOut',
+            onComplete: () => {
+              setEggDisplaySize(sprite);
+              sprite.clearTint();
+              finishOne();
+            },
+          });
+        },
+      });
+    });
   });
 
-  convertedEggs.forEach((egg) => {
-    const sprite = tileSprites[egg.row] && tileSprites[egg.row][egg.col];
-    if (!sprite) return;
-    sprite.setTint(0xc49a5c);
-    const petrifyScale = getEggScale(sprite, 1.22);
+  gameInstance.time.delayedCall(totalDuration + 80, () => {
+    if (completed < convertedEggs.length && !isGameOver && expectedToken === earthPetrifyToken) {
+      finishConversion();
+    }
+  });
+}
+
+function getScoreStatElement() {
+  return scoreText ? scoreText.closest('.stat') : null;
+}
+
+function getOrCreateLeafBuffIndicator() {
+  const scoreStat = getScoreStatElement();
+  if (!scoreStat) {
+    return null;
+  }
+
+  if (leafBuffIndicatorElement && leafBuffIndicatorElement.parentElement === scoreStat) {
+    return leafBuffIndicatorElement;
+  }
+
+  if (leafBuffIndicatorElement) {
+    try { leafBuffIndicatorElement.remove(); } catch (e) {}
+  }
+
+  leafBuffIndicatorElement = document.createElement('div');
+  leafBuffIndicatorElement.className = 'leaf-buff-indicator';
+  scoreStat.appendChild(leafBuffIndicatorElement);
+  return leafBuffIndicatorElement;
+}
+
+function playLeafScorePulse() {
+  const scoreStat = getScoreStatElement();
+  if (!scoreStat) return;
+
+  scoreStat.classList.remove('leaf-score-pulse');
+  void scoreStat.offsetWidth;
+  scoreStat.classList.add('leaf-score-pulse');
+  setTimeout(() => {
+    scoreStat.classList.remove('leaf-score-pulse');
+  }, 460);
+}
+
+function clearLeafBuffIndicator(withFade = false) {
+  const indicator = leafBuffIndicatorElement;
+  leafBuffIndicatorElement = null;
+  if (!indicator) {
+    return;
+  }
+
+  if (withFade) {
+    indicator.classList.add('leaf-buff-ending');
+    setTimeout(() => {
+      try { indicator.remove(); } catch (e) {}
+    }, 440);
+    return;
+  }
+
+  try { indicator.remove(); } catch (e) {}
+}
+
+function updateLeafScoreBuffUi(preserveEndingIndicator = false) {
+  const scoreStat = getScoreStatElement();
+  if (!scoreStat) {
+    clearLeafBuffIndicator();
+    return;
+  }
+
+  scoreStat.classList.toggle('score-leaf-boost-active', leafDoubleScoreMovesRemaining > 0);
+  if (leafDoubleScoreMovesRemaining > 0) {
+    const indicator = getOrCreateLeafBuffIndicator();
+    if (indicator) {
+      indicator.textContent = `🌿 x${leafDoubleScoreMovesRemaining}`;
+    }
+    return;
+  }
+
+  if (!preserveEndingIndicator) {
+    clearLeafBuffIndicator();
+  }
+}
+
+function playLeafFallAnimation(count = 6) {
+  const scoreStat = getScoreStatElement();
+  if (!scoreStat) return;
+
+  const rect = scoreStat.getBoundingClientRect();
+  for (let i = 0; i < count; i++) {
+    const leaf = document.createElement('span');
+    leaf.className = 'leaf-fall';
+    leaf.textContent = '🌿';
+    leaf.style.left = `${rect.left + rect.width * Phaser.Math.FloatBetween(0.12, 0.88)}px`;
+    leaf.style.top = `${rect.top + Phaser.Math.FloatBetween(4, 22)}px`;
+    leaf.style.animationDelay = `${i * 45}ms`;
+    document.body.appendChild(leaf);
+    setTimeout(() => {
+      try { leaf.remove(); } catch (e) {}
+    }, 1200);
+  }
+}
+
+function playLeafBuffExpiredEffect() {
+  playLeafFallAnimation(4);
+  clearLeafBuffIndicator(true);
+}
+
+function playLeafBuffSweep(onComplete) {
+  if (!gameInstance) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const leaves = [];
+  const glow = gameInstance.add.rectangle(
+    BOARD_RENDER_WIDTH / 2,
+    BOARD_RENDER_HEIGHT / 2,
+    BOARD_RENDER_WIDTH,
+    BOARD_RENDER_HEIGHT,
+    0x56d86a,
+    0.12
+  );
+  glow.setDepth(1150);
+  leaves.push(glow);
+  gameInstance.tweens.add({
+    targets: glow,
+    alpha: 0,
+    duration: 520,
+    ease: 'Sine.easeOut',
+  });
+
+  for (let i = 0; i < 14; i++) {
+    const startX = -80 - i * 20;
+    const startY = Phaser.Math.Between(30, BOARD_RENDER_HEIGHT - 90);
+    const leaf = gameInstance.add.ellipse(startX, startY, 38, 18, i % 2 ? 0x8cff66 : 0x2ecc71, 0.82);
+    leaf.setAngle(Phaser.Math.Between(-38, 24));
+    leaf.setDepth(1152);
+    leaves.push(leaf);
     gameInstance.tweens.add({
-      targets: sprite,
-      scaleX: petrifyScale.x,
-      scaleY: petrifyScale.y,
-      duration: 140,
-      yoyo: true,
-      repeat: 1,
+      targets: leaf,
+      x: BOARD_RENDER_WIDTH + 86,
+      y: startY + Phaser.Math.Between(60, 170),
+      angle: leaf.angle + Phaser.Math.Between(120, 210),
+      alpha: 0,
+      duration: 720,
+      delay: i * 28,
       ease: 'Sine.easeInOut',
-      onComplete: () => {
-        setEggDisplaySize(sprite);
-        sprite.clearTint();
-      },
     });
+  }
+
+  gameInstance.time.delayedCall(780, () => {
+    leaves.forEach((leaf) => {
+      try { gameInstance.tweens.killTweensOf(leaf); } catch (e) {}
+      try { leaf.destroy(); } catch (e) {}
+    });
+    if (onComplete) onComplete();
   });
 }
 
@@ -2115,10 +3559,10 @@ function activateLeafDragonSkill() {
   console.log('Leaf Dragon skill activated: next 3 moves x2');
   console.log('Leaf moves remaining:', leafDoubleScoreMovesRemaining);
   updateLeafBlessingUi();
-  showTimerPopup('Nature Blessing x2: 3 moves!');
+  playLeafScorePulse();
 }
 
-function updateLeafBlessingUi() {
+function updateLeafBlessingUi(options = {}) {
   const leafMeterElement = document.querySelector('.energy-meter:nth-child(3)');
   if (leafMeterElement) {
     leafMeterElement.classList.toggle('nature-blessing-active', leafDoubleScoreMovesRemaining > 0);
@@ -2134,6 +3578,7 @@ function updateLeafBlessingUi() {
       }
     }
   }
+  updateLeafScoreBuffUi(Boolean(options.preserveScoreIndicator));
 }
 
 function startLeafScoreForSuccessfulMove() {
@@ -2143,6 +3588,7 @@ function startLeafScoreForSuccessfulMove() {
     scoreMultiplier = 2;
     console.log('Leaf x2 active for this move');
     updateLeafBlessingUi();
+    playLeafScorePulse();
     return;
   }
 
@@ -2157,11 +3603,15 @@ function finishLeafScoreForSuccessfulMove() {
     return;
   }
 
+  const previousMovesRemaining = leafDoubleScoreMovesRemaining;
   if (!leafSkillRefreshedDuringCurrentMove) {
     leafDoubleScoreMovesRemaining = Math.max(0, leafDoubleScoreMovesRemaining - 1);
   }
 
   console.log('Leaf moves remaining:', leafDoubleScoreMovesRemaining);
+  if (previousMovesRemaining !== leafDoubleScoreMovesRemaining && leafDoubleScoreMovesRemaining > 0) {
+    playLeafFallAnimation(5);
+  }
   if (leafDoubleScoreMovesRemaining === 0) {
     console.log('Leaf buff expired');
   }
@@ -2169,7 +3619,285 @@ function finishLeafScoreForSuccessfulMove() {
   scoreMultiplier = 1;
   leafDoubleScoreActiveForCurrentMove = false;
   leafSkillRefreshedDuringCurrentMove = false;
-  updateLeafBlessingUi();
+  if (previousMovesRemaining !== leafDoubleScoreMovesRemaining && leafDoubleScoreMovesRemaining === 0) {
+    updateLeafBlessingUi({ preserveScoreIndicator: true });
+    playLeafBuffExpiredEffect();
+  } else {
+    updateLeafBlessingUi();
+  }
+}
+
+function createIceCrackLine(x, y, length, angle, alpha = 0.55) {
+  if (!gameInstance) return null;
+
+  const crack = gameInstance.add.rectangle(x, y, length, 3, 0xdff6ff, alpha);
+  crack.setAngle(angle);
+  crack.setDepth(1184);
+  return crack;
+}
+
+function playIceFreezeBurst(isRefresh = false) {
+  if (!gameInstance) return;
+
+  const centerX = BOARD_RENDER_WIDTH / 2;
+  const centerY = BOARD_RENDER_HEIGHT / 2;
+  const flash = gameInstance.add.rectangle(centerX, centerY, BOARD_RENDER_WIDTH, BOARD_RENDER_HEIGHT, 0xdff6ff, isRefresh ? 0.24 : 0.46);
+  flash.setDepth(1190);
+  gameInstance.tweens.add({
+    targets: flash,
+    alpha: 0,
+    duration: isRefresh ? 260 : 420,
+    ease: 'Cubic.easeOut',
+    onComplete: () => {
+      try { flash.destroy(); } catch (e) {}
+    },
+  });
+
+  const ring = gameInstance.add.circle(centerX, centerY, 30, 0x9feaff, 0.12);
+  ring.setStrokeStyle(5, 0xdff6ff, 0.72);
+  ring.setDepth(1188);
+  gameInstance.tweens.add({
+    targets: ring,
+    scale: isRefresh ? 8 : 12,
+    alpha: 0,
+    duration: isRefresh ? 360 : 520,
+    ease: 'Cubic.easeOut',
+    onComplete: () => {
+      try { ring.destroy(); } catch (e) {}
+    },
+  });
+
+  const crackCount = isRefresh ? 8 : 14;
+  for (let i = 0; i < crackCount; i++) {
+    const angle = (360 / crackCount) * i + Phaser.Math.Between(-12, 12);
+    const distance = Phaser.Math.Between(34, 190);
+    const radians = Phaser.Math.DegToRad(angle);
+    const crack = createIceCrackLine(
+      centerX + Math.cos(radians) * distance,
+      centerY + Math.sin(radians) * distance,
+      Phaser.Math.Between(42, 96),
+      angle + Phaser.Math.Between(-35, 35),
+      0.5
+    );
+    if (!crack) continue;
+    crack.setScale(0.08, 1);
+    gameInstance.tweens.add({
+      targets: crack,
+      scaleX: 1,
+      alpha: 0,
+      duration: Phaser.Math.Between(320, 520),
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        try { crack.destroy(); } catch (e) {}
+      },
+    });
+  }
+}
+
+function startIceFreezeOverlay() {
+  if (!gameInstance) return;
+
+  if (iceFreezeOverlay) {
+    playIceFreezeBurst(true);
+    return;
+  }
+
+  const centerX = BOARD_RENDER_WIDTH / 2;
+  const centerY = BOARD_RENDER_HEIGHT / 2;
+  const objects = [];
+
+  const coolWash = gameInstance.add.rectangle(centerX, centerY, BOARD_RENDER_WIDTH, BOARD_RENDER_HEIGHT, 0x7ed8ff, 0.08);
+  coolWash.setDepth(1160);
+  objects.push(coolWash);
+
+  const topFrost = gameInstance.add.rectangle(centerX, 16, BOARD_RENDER_WIDTH, 32, 0xdff6ff, 0.18);
+  const bottomFrost = gameInstance.add.rectangle(centerX, BOARD_RENDER_HEIGHT - 16, BOARD_RENDER_WIDTH, 32, 0xdff6ff, 0.16);
+  const leftFrost = gameInstance.add.rectangle(16, centerY, 32, BOARD_RENDER_HEIGHT, 0xdff6ff, 0.16);
+  const rightFrost = gameInstance.add.rectangle(BOARD_RENDER_WIDTH - 16, centerY, 32, BOARD_RENDER_HEIGHT, 0xdff6ff, 0.16);
+  [topFrost, bottomFrost, leftFrost, rightFrost].forEach((edge) => {
+    edge.setDepth(1162);
+    objects.push(edge);
+  });
+
+  for (let i = 0; i < 10; i++) {
+    const sparkle = gameInstance.add.star(
+      Phaser.Math.Between(28, BOARD_RENDER_WIDTH - 28),
+      Phaser.Math.Between(24, BOARD_RENDER_HEIGHT - 24),
+      4,
+      2,
+      5,
+      0xe8fbff,
+      0.42
+    );
+    sparkle.setDepth(1164);
+    objects.push(sparkle);
+    gameInstance.tweens.add({
+      targets: sparkle,
+      alpha: 0.08,
+      scale: 1.35,
+      duration: Phaser.Math.Between(700, 1100),
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+      delay: i * 80,
+    });
+  }
+
+  for (let i = 0; i < 8; i++) {
+    const crack = createIceCrackLine(
+      Phaser.Math.Between(42, BOARD_RENDER_WIDTH - 42),
+      Phaser.Math.Between(42, BOARD_RENDER_HEIGHT - 42),
+      Phaser.Math.Between(34, 78),
+      Phaser.Math.Between(-70, 70),
+      0.18
+    );
+    if (crack) {
+      crack.setDepth(1163);
+      objects.push(crack);
+    }
+  }
+
+  iceFreezeOverlay = { objects };
+  playIceFreezeBurst(false);
+}
+
+function stopIceFreezeOverlay(immediate = false) {
+  if (!iceFreezeOverlay || !gameInstance) {
+    iceFreezeOverlay = null;
+    return;
+  }
+
+  const overlay = iceFreezeOverlay;
+  iceFreezeOverlay = null;
+
+  const destroyObjects = () => {
+    overlay.objects.forEach((object) => {
+      try { gameInstance.tweens.killTweensOf(object); } catch (e) {}
+      try { object.destroy(); } catch (e) {}
+    });
+  };
+
+  if (immediate) {
+    destroyObjects();
+    return;
+  }
+
+  overlay.objects.forEach((object) => {
+    gameInstance.tweens.add({
+      targets: object,
+      alpha: 0,
+      duration: 420,
+      ease: 'Sine.easeOut',
+    });
+  });
+
+  for (let i = 0; i < 9; i++) {
+    const shard = gameInstance.add.triangle(
+      Phaser.Math.Between(40, BOARD_RENDER_WIDTH - 40),
+      Phaser.Math.Between(35, BOARD_RENDER_HEIGHT - 35),
+      0,
+      -8,
+      7,
+      8,
+      -7,
+      8,
+      0xdff6ff,
+      0.48
+    );
+    shard.setDepth(1187);
+    gameInstance.tweens.add({
+      targets: shard,
+      y: shard.y + Phaser.Math.Between(24, 58),
+      alpha: 0,
+      angle: Phaser.Math.Between(-80, 80),
+      duration: 360,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        try { shard.destroy(); } catch (e) {}
+      },
+    });
+  }
+
+  gameInstance.time.delayedCall(450, destroyObjects);
+}
+
+function getTimerStatElement() {
+  return timerText ? timerText.closest('.stat') : null;
+}
+
+function clearTimerFrozenDecorations() {
+  timerFrozenVisualElements.forEach((element) => {
+    try { element.remove(); } catch (e) {}
+  });
+  timerFrozenVisualElements = [];
+}
+
+function createTimerFrozenDecorations(timerStat) {
+  if (!timerStat || timerFrozenVisualElements.length) {
+    return;
+  }
+
+  const shardData = [
+    { left: '8%', top: '18%', rotate: '-22deg' },
+    { left: '70%', top: '16%', rotate: '18deg' },
+    { left: '12%', top: '78%', rotate: '15deg' },
+    { left: '74%', top: '76%', rotate: '-18deg' },
+  ];
+  shardData.forEach((data) => {
+    const shard = document.createElement('span');
+    shard.className = 'timer-frost-shard';
+    shard.style.left = data.left;
+    shard.style.top = data.top;
+    shard.style.transform = `rotate(${data.rotate})`;
+    timerStat.appendChild(shard);
+    timerFrozenVisualElements.push(shard);
+  });
+
+  const sparkleData = [
+    { left: '22%', top: '28%', delay: '0ms' },
+    { left: '82%', top: '36%', delay: '220ms' },
+    { left: '50%', top: '82%', delay: '420ms' },
+  ];
+  sparkleData.forEach((data) => {
+    const sparkle = document.createElement('span');
+    sparkle.className = 'timer-frost-sparkle';
+    sparkle.style.left = data.left;
+    sparkle.style.top = data.top;
+    sparkle.style.animationDelay = data.delay;
+    timerStat.appendChild(sparkle);
+    timerFrozenVisualElements.push(sparkle);
+  });
+}
+
+function playTimerFreezePulse() {
+  const timerStat = getTimerStatElement();
+  if (!timerStat) return;
+
+  timerStat.classList.remove('timer-freeze-pulse');
+  void timerStat.offsetWidth;
+  timerStat.classList.add('timer-freeze-pulse');
+  setTimeout(() => {
+    timerStat.classList.remove('timer-freeze-pulse');
+  }, 460);
+}
+
+function setTimerFrozenVisualActive(isActive) {
+  const timerStat = getTimerStatElement();
+  if (!timerStat) {
+    clearTimerFrozenDecorations();
+    return;
+  }
+
+  if (isActive) {
+    timerStat.classList.add('frozen-timer-glow');
+    createTimerFrozenDecorations(timerStat);
+    playTimerFreezePulse();
+    return;
+  }
+
+  timerStat.classList.remove('frozen-timer-glow');
+  timerStat.classList.remove('timer-freeze-pulse');
+  clearTimerFrozenDecorations();
 }
 
 function activateIceDragonSkill() {
@@ -2205,8 +3933,8 @@ function activateIceDragonSkill() {
     }
   }
   
-  showTimerPopup('Frozen Time!');
-  flashFrozenTimer();
+  startIceFreezeOverlay();
+  setTimerFrozenVisualActive(true);
   
   frozenTimeEvent = setTimeout(() => {
     deactivateFrozenTime();
@@ -2227,18 +3955,13 @@ function deactivateFrozenTime() {
     }
   }
   
-  const timerStat = timerText ? timerText.closest('.stat') : null;
-  if (timerStat) {
-    timerStat.classList.remove('frozen-timer-glow');
-  }
-  
+  setTimerFrozenVisualActive(false);
+  stopIceFreezeOverlay(false);
   frozenTimeEvent = null;
 }
 
 function flashFrozenTimer() {
-  const timerStat = timerText ? timerText.closest('.stat') : null;
-  if (!timerStat) return;
-  timerStat.classList.add('frozen-timer-glow');
+  setTimerFrozenVisualActive(true);
 }
 
 function clearDragonSkillUi() {
@@ -2260,6 +3983,12 @@ function clearDragonSkillUi() {
       moveCounterElement.textContent = '';
     }
   }
+  const scoreStat = getScoreStatElement();
+  if (scoreStat) {
+    scoreStat.classList.remove('score-leaf-boost-active');
+    scoreStat.classList.remove('leaf-score-pulse');
+  }
+  clearLeafBuffIndicator();
 
   const iceMeterElement = document.querySelector('.energy-meter:nth-child(2)');
   if (iceMeterElement) {
@@ -2270,10 +3999,8 @@ function clearDragonSkillUi() {
     }
   }
 
-  const timerStat = timerText ? timerText.closest('.stat') : null;
-  if (timerStat) {
-    timerStat.classList.remove('frozen-timer-glow');
-  }
+  setTimerFrozenVisualActive(false);
+  stopIceFreezeOverlay(true);
 }
 
 function addScore(baseScore) {
@@ -2287,6 +4014,9 @@ function addScore(baseScore) {
   score += finalScore;
   console.log('total score', score);
   updateUi();
+  if (scoreMultiplier > 1 && leafDoubleScoreActiveForCurrentMove) {
+    playLeafScorePulse();
+  }
 }
 
 function createTimerPopup(text) {
@@ -2379,6 +4109,8 @@ function endGame() {
   };
   pendingFireStorm = null;
   pendingEarthPetrify = false;
+  earthPetrifyToken += 1;
+  cancelActiveDragonCutIn();
   clearDelayedSpecialQueue();
   if (earthPetrifyTimeout) {
     clearTimeout(earthPetrifyTimeout);
@@ -2434,6 +4166,9 @@ function resetGame() {
   };
   pendingFireStorm = null;
   pendingEarthPetrify = false;
+  earthPetrifyToken += 1;
+  cancelActiveDragonCutIn();
+  isAnimating = false;
   clearDelayedSpecialQueue();
   if (earthPetrifyTimeout) {
     clearTimeout(earthPetrifyTimeout);
