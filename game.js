@@ -16,10 +16,18 @@ const TILE_SIZE = 100;
 const GRID_OFFSET_X = 80;
 const GRID_OFFSET_Y = 80;
 const EGG_TYPES = ['fire', 'water', 'leaf', 'earth'];
+const DRAGON_TYPES = ['Fire', 'Ice', 'Leaf', 'Earth'];
+const DRAGON_ENERGY_MAX = 30;
 const NORMAL_SCALE = 1;
 const SELECTED_SCALE = 1.15;
 const MATCH_SCORE = 10;
 const TIMER_SECONDS = 90;
+const FIRE_STORM_CENTERS = [
+  { row: 2, col: 2 },
+  { row: 2, col: 3 },
+  { row: 3, col: 2 },
+  { row: 3, col: 3 }
+];
 
 let board = [];
 let tileSprites = [];
@@ -29,6 +37,15 @@ let score = 0;
 let timer = TIMER_SECONDS;
 let countdownEvent;
 let comboCount = 0;
+let dragonEnergy = [0, 0, 0, 0];
+let dragonEnergyText = [];
+let dragonEnergyFill = [];
+let pendingFireStorm = null;
+let scoreMultiplier = 1;
+let natureBlessingEvent = null;
+let frozenTimeActive = false;
+let frozenTimeEvent = null;
+let frozenTimeRemaining = 0;
 let scoreText;
 let timerText;
 let comboText;
@@ -53,6 +70,9 @@ function create() {
   finalScoreText = document.getElementById('finalScore');
   restartButton = document.getElementById('restartButton');
   overlayRestartButton = document.getElementById('overlayRestart');
+
+  dragonEnergyText = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}EnergyProgress`));
+  dragonEnergyFill = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}EnergyFill`));
 
   restartButton.addEventListener('click', resetGame);
   overlayRestartButton.addEventListener('click', resetGame);
@@ -592,9 +612,38 @@ function resolveBoard(isAutomatic = false) {
       }
     });
 
-    score += totalScoreGain;
-    console.log('total score', score);
-    updateUi();
+    if (pendingFireStorm) {
+      console.log('Processing pending Fire Storm');
+      const stormCells = getFireStormArea(pendingFireStorm.center);
+      console.log('Fire Storm cells to destroy:', stormCells.length);
+      let newStormDestroyed = 0;
+      stormCells.forEach((tile) => {
+        const key = `${tile.row}-${tile.col}`;
+        if (!destroyedCells.has(key)) {
+          destroyedCells.add(key);
+          newStormDestroyed += 1;
+        }
+      });
+
+      totalScoreGain += newStormDestroyed * MATCH_SCORE + 50;
+      console.log('Fire Storm destroyed eggs', stormCells.length);
+      console.log('Fire Storm bonus +50');
+      const centerX = GRID_OFFSET_X + pendingFireStorm.center.col * TILE_SIZE + TILE_SIZE / 2;
+      const centerY = GRID_OFFSET_Y + pendingFireStorm.center.row * TILE_SIZE + TILE_SIZE / 2;
+      showFireStormEffect(pendingFireStorm.center);
+      createScorePopup(centerX, centerY + 28, '+50 Bonus', 28);
+      pendingFireStorm = null;
+    }
+
+    destroyedCells.forEach((key) => {
+      const [row, col] = key.split('-').map(Number);
+      const type = board[row][col];
+      if (type !== null && type !== undefined) {
+        gainDragonEnergy(type);
+      }
+    });
+
+    addScore(totalScoreGain);
 
     animateRemovals(destroyedCells, () => {
       runStep();
@@ -989,6 +1038,303 @@ function updateUi() {
   scoreText.textContent = score;
   timerText.textContent = timer;
   comboText.textContent = comboCount >= 1 ? `Combo x${comboCount}` : 'None';
+  updateDragonEnergyUi();
+}
+
+function updateDragonEnergyUi() {
+  dragonEnergy.forEach((value, index) => {
+    const progressElement = dragonEnergyText[index];
+    const fillElement = dragonEnergyFill[index];
+    if (progressElement) {
+      progressElement.textContent = `${value}/${DRAGON_ENERGY_MAX}`;
+    }
+    if (fillElement) {
+      fillElement.style.width = `${(value / DRAGON_ENERGY_MAX) * 100}%`;
+    }
+  });
+}
+
+function getRandomBoardCell() {
+  const validCells = [];
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      if (board[row][col] !== null && board[row][col] !== undefined) {
+        validCells.push({ row, col });
+      }
+    }
+  }
+  if (!validCells.length) {
+    return null;
+  }
+  return validCells[Math.floor(Math.random() * validCells.length)];
+}
+
+function getFireStormArea(center) {
+  const cells = [];
+  for (let row = center.row - 2; row <= center.row + 2; row++) {
+    for (let col = center.col - 2; col <= center.col + 2; col++) {
+      if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
+        cells.push({ row, col });
+      }
+    }
+  }
+  return cells;
+}
+
+function triggerFireStorm() {
+  // Deprecated: use activateFireDragonSkill() instead
+}
+
+function showFireStormEffect(center) {
+  if (!gameInstance) return;
+  const x = GRID_OFFSET_X + center.col * TILE_SIZE;
+  const y = GRID_OFFSET_Y + center.row * TILE_SIZE;
+
+  const explosion = gameInstance.add.circle(x, y, 24, 0xff6600, 0.75);
+  explosion.setDepth(900);
+  gameInstance.tweens.add({
+    targets: explosion,
+    scale: 2.4,
+    alpha: 0,
+    duration: 420,
+    ease: 'Cubic.easeOut',
+    onComplete: () => {
+      try { explosion.destroy(); } catch (e) {}
+    },
+  });
+
+  const stormText = gameInstance.add.text(x, y - 16, 'Fire Storm!', {
+    font: '28px Arial',
+    fill: '#ffbf00',
+    stroke: '#300000',
+    strokeThickness: 6,
+  }).setOrigin(0.5);
+  stormText.setDepth(1000);
+  gameInstance.tweens.add({
+    targets: stormText,
+    y: y - 48,
+    alpha: 0,
+    duration: 1000,
+    ease: 'Power1',
+    onComplete: () => {
+      try { stormText.destroy(); } catch (e) {}
+    },
+  });
+}
+
+function gainDragonEnergy(type) {
+  if (type < 0 || type >= dragonEnergy.length) {
+    return;
+  }
+
+  dragonEnergy[type] += 1;
+  console.log(`${DRAGON_TYPES[type]} energy +1`);
+  console.log('Fire energy:', dragonEnergy[0]);
+
+  if (dragonEnergy[type] >= DRAGON_ENERGY_MAX) {
+    console.log(`${DRAGON_TYPES[type]} Dragon skill ready`);
+
+    if (type === 0) {
+      console.log('Fire reached 30');
+      console.log('Calling activateFireDragonSkill');
+      activateFireDragonSkill();
+    }
+
+    if (type === 1) {
+      console.log('Ice energy reached 30');
+      activateIceDragonSkill();
+    }
+
+    if (type === 2) {
+      console.log('Leaf energy reached 30');
+      activateLeafDragonSkill();
+    }
+
+    dragonEnergy[type] = 0;
+    if (type === 1) {
+      console.log('Ice energy reset to 0');
+      updateUi();
+    }
+    if (type === 0) {
+      console.log('Fire energy reset to 0');
+    }
+    if (type === 2) {
+      console.log('Leaf energy reset to 0');
+      updateDragonEnergyUi();
+    }
+  }
+}
+
+function activateFireDragonSkill() {
+  const center = FIRE_STORM_CENTERS[Math.floor(Math.random() * FIRE_STORM_CENTERS.length)];
+  console.log('Fire Dragon skill activated');
+  console.log('Fire Storm picked center:', center.row, center.col);
+  const radius = 2;
+  console.log('Fire Storm 5x5 target cells:', getFireStormArea(center).length);
+  pendingFireStorm = { center };
+}
+
+function activateLeafDragonSkill() {
+  console.log('Leaf Dragon skill activated');
+  
+  if (natureBlessingEvent) {
+    clearTimeout(natureBlessingEvent);
+    console.log('Nature Blessing refreshed');
+  }
+  
+  scoreMultiplier = 2;
+  console.log('Score multiplier x2 active');
+  
+  const leafMeterElement = document.querySelector('.energy-meter:nth-child(3)');
+  if (leafMeterElement) {
+    leafMeterElement.classList.add('nature-blessing-active');
+    const countdownElement = leafMeterElement.querySelector('.blessing-countdown');
+    if (countdownElement) {
+      countdownElement.style.display = 'block';
+      let timeLeft = 5;
+      const updateCountdown = () => {
+        countdownElement.textContent = `${timeLeft}s`;
+        if (timeLeft > 0) {
+          timeLeft--;
+          setTimeout(updateCountdown, 1000);
+        }
+      };
+      updateCountdown();
+    }
+  }
+  
+  showTimerPopup('Nature Blessing x2!');
+  
+  natureBlessingEvent = setTimeout(() => {
+    deactivateNatureBlessing();
+  }, 5000);
+}
+
+function deactivateNatureBlessing() {
+  scoreMultiplier = 1;
+  console.log('Nature Blessing ended');
+  
+  const leafMeterElement = document.querySelector('.energy-meter:nth-child(3)');
+  if (leafMeterElement) {
+    leafMeterElement.classList.remove('nature-blessing-active');
+    const countdownElement = leafMeterElement.querySelector('.blessing-countdown');
+    if (countdownElement) {
+      countdownElement.style.display = 'none';
+    }
+  }
+  
+  natureBlessingEvent = null;
+}
+
+function activateIceDragonSkill() {
+  console.log('Ice Dragon skill activated - Frozen Time!');
+  
+  if (frozenTimeEvent) {
+    clearTimeout(frozenTimeEvent);
+    console.log('Frozen Time refreshed');
+  }
+  
+  frozenTimeActive = true;
+  frozenTimeRemaining = 5;
+  
+  const iceMeterElement = document.querySelector('.energy-meter:nth-child(2)');
+  if (iceMeterElement) {
+    iceMeterElement.classList.add('frozen-time-active');
+    const countdownElement = iceMeterElement.querySelector('.frozen-time-countdown');
+    if (countdownElement) {
+      countdownElement.style.display = 'block';
+      let timeLeft = frozenTimeRemaining;
+      const updateCountdown = () => {
+        countdownElement.textContent = `${timeLeft}s`;
+        if (timeLeft > 0) {
+          timeLeft--;
+          setTimeout(updateCountdown, 1000);
+        }
+      };
+      updateCountdown();
+    }
+  }
+  
+  showTimerPopup('Frozen Time!');
+  flashFrozenTimer();
+  
+  frozenTimeEvent = setTimeout(() => {
+    deactivateFrozenTime();
+  }, 5000);
+}
+
+function deactivateFrozenTime() {
+  frozenTimeActive = false;
+  frozenTimeRemaining = 0;
+  console.log('Frozen Time ended');
+  
+  const iceMeterElement = document.querySelector('.energy-meter:nth-child(2)');
+  if (iceMeterElement) {
+    iceMeterElement.classList.remove('frozen-time-active');
+    const countdownElement = iceMeterElement.querySelector('.frozen-time-countdown');
+    if (countdownElement) {
+      countdownElement.style.display = 'none';
+    }
+  }
+  
+  const timerStat = timerText ? timerText.closest('.stat') : null;
+  if (timerStat) {
+    timerStat.classList.remove('frozen-timer-glow');
+  }
+  
+  frozenTimeEvent = null;
+}
+
+function flashFrozenTimer() {
+  const timerStat = timerText ? timerText.closest('.stat') : null;
+  if (!timerStat) return;
+  timerStat.classList.add('frozen-timer-glow');
+}
+
+function addScore(baseScore) {
+  const finalScore = baseScore * scoreMultiplier;
+  console.log('Base score:', baseScore);
+  console.log('Final score:', finalScore);
+  score += finalScore;
+  console.log('total score', score);
+  updateUi();
+}
+
+function createTimerPopup(text) {
+  const popup = document.createElement('div');
+  popup.className = 'timer-popup';
+  popup.textContent = text;
+  document.body.appendChild(popup);
+  return popup;
+}
+
+function showTimerPopup(text) {
+  if (!timerText) return;
+  const popup = createTimerPopup(text);
+  const rect = timerText.getBoundingClientRect();
+  popup.style.left = `${rect.left + rect.width / 2}px`;
+  popup.style.top = `${rect.top - 12}px`;
+  popup.style.transform = 'translate(-50%, -100%)';
+
+  requestAnimationFrame(() => {
+    popup.classList.add('visible');
+  });
+
+  setTimeout(() => {
+    popup.classList.remove('visible');
+    setTimeout(() => {
+      try { document.body.removeChild(popup); } catch (e) {}
+    }, 220);
+  }, 900);
+}
+
+function flashTimer() {
+  const timerStat = timerText ? timerText.closest('.stat') : null;
+  if (!timerStat) return;
+  timerStat.classList.add('timer-flash');
+  setTimeout(() => {
+    timerStat.classList.remove('timer-flash');
+  }, 300);
 }
 
 function startTimer() {
@@ -1002,7 +1348,10 @@ function startTimer() {
       if (timer <= 0) {
         return;
       }
-      timer -= 1;
+      // Frozen Time: timer does not decrease while active
+      if (!frozenTimeActive) {
+        timer -= 1;
+      }
       updateUi();
       if (timer === 0) {
         endGame();
@@ -1022,7 +1371,14 @@ function resetGame() {
   gameOverOverlay.classList.add('hidden');
   score = 0;
   comboCount = 0;
+  dragonEnergy = [0, 0, 0, 0];
   isAnimating = false;
+  frozenTimeActive = false;
+  frozenTimeRemaining = 0;
+  if (frozenTimeEvent) {
+    clearTimeout(frozenTimeEvent);
+    frozenTimeEvent = null;
+  }
   clearBoardSprites();
   initializeBoard();
   createBoardSprites();

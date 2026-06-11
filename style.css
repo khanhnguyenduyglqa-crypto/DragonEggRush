@@ -59,6 +59,37 @@ body {
   font-weight: 700;
 }
 
+.timer-flash {
+  animation: timerFlash 0.35s ease;
+}
+
+.timer-popup {
+  position: absolute;
+  pointer-events: none;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(35, 110, 255, 0.95);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  opacity: 0;
+  transform: translate(-50%, -100%) scale(0.92);
+  transition: opacity 200ms ease, transform 200ms ease;
+  z-index: 2000;
+  box-shadow: 0 12px 32px rgba(12, 60, 170, 0.35);
+}
+
+.timer-popup.visible {
+  opacity: 1;
+  transform: translate(-50%, -100%) scale(1);
+}
+
+@keyframes timerFlash {
+  0% { box-shadow: 0 0 0 rgba(0, 140, 255, 0.6); }
+  50% { box-shadow: 0 0 20px rgba(0, 140, 255, 0.9); }
+  100% { box-shadow: 0 0 0 rgba(0, 140, 255, 0); }
+}
+
 button {
   width: 100%;
   max-width: 240px;
@@ -86,6 +117,62 @@ button:hover {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+}
+
+.game-area {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: center;
+  width: min(1000px, 100%);
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.energy-panel {
+  display: grid;
+  gap: 14px;
+  width: min(220px, 100%);
+  background: rgba(20, 18, 38, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 16px;
+}
+
+.energy-meter {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.energy-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ffd98f;
+}
+
+.energy-progress {
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.energy-bar {
+  width: 100%;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.energy-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #ff854e 0%, #ff3dad 100%);
+  border-radius: 999px;
+  transition: width 220ms ease;
 }
 
 .overlay {
@@ -138,4 +225,80 @@ button:hover {
   button {
     max-width: 100%;
   }
+}
+
+.blessing-countdown {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #4afe5a;
+  text-align: center;
+  padding: 6px 0;
+}
+
+.energy-meter.nature-blessing-active {
+  background: rgba(74, 254, 90, 0.15);
+  border: 1px solid rgba(74, 254, 90, 0.4);
+  box-shadow: 0 0 16px rgba(74, 254, 90, 0.3), inset 0 0 16px rgba(74, 254, 90, 0.1);
+  animation: natureBlessingPulse 2s ease-in-out infinite;
+}
+
+.energy-meter.nature-blessing-active .energy-fill {
+  background: linear-gradient(90deg, #4afe5a 0%, #2dd84b 100%);
+}
+
+.energy-meter.nature-blessing-active .energy-title {
+  color: #4afe5a;
+  text-shadow: 0 0 8px rgba(74, 254, 90, 0.5);
+}
+
+@keyframes natureBlessingPulse {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(74, 254, 90, 0.3), inset 0 0 16px rgba(74, 254, 90, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(74, 254, 90, 0.5), inset 0 0 20px rgba(74, 254, 90, 0.2);
+  }
+}
+
+.frozen-time-countdown {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #4db8ff;
+  text-align: center;
+  padding: 6px 0;
+}
+
+.energy-meter.frozen-time-active {
+  background: rgba(77, 184, 255, 0.15);
+  border: 1px solid rgba(77, 184, 255, 0.4);
+  box-shadow: 0 0 16px rgba(77, 184, 255, 0.3), inset 0 0 16px rgba(77, 184, 255, 0.1);
+  animation: frozenTimePulse 2s ease-in-out infinite;
+}
+
+.energy-meter.frozen-time-active .energy-fill {
+  background: linear-gradient(90deg, #4db8ff 0%, #2d7fb8 100%);
+}
+
+.energy-meter.frozen-time-active .energy-title {
+  color: #4db8ff;
+  text-shadow: 0 0 8px rgba(77, 184, 255, 0.5);
+}
+
+@keyframes frozenTimePulse {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(77, 184, 255, 0.3), inset 0 0 16px rgba(77, 184, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(77, 184, 255, 0.5), inset 0 0 20px rgba(77, 184, 255, 0.2);
+  }
+}
+
+.frozen-timer-glow {
+  animation: frozenTimerFlash 0.35s ease;
+}
+
+@keyframes frozenTimerFlash {
+  0% { box-shadow: 0 0 0 rgba(77, 184, 255, 0.6); }
+  50% { box-shadow: 0 0 20px rgba(77, 184, 255, 0.9); }
+  100% { box-shadow: 0 0 0 rgba(77, 184, 255, 0); }
 }

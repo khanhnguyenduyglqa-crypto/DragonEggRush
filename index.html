@@ -26,7 +26,41 @@
     <button id="restartButton">Restart Game</button>
   </div>
 
-  <div id="gameContainer"></div>
+  <div class="game-area">
+    <div class="energy-panel">
+      <div class="energy-meter">
+        <div class="energy-title">Fire Dragon</div>
+        <div class="energy-progress" id="fireEnergyProgress">0/30</div>
+        <div class="energy-bar">
+          <div class="energy-fill" id="fireEnergyFill"></div>
+        </div>
+      </div>
+      <div class="energy-meter">
+        <div class="energy-title">Ice Dragon</div>
+        <div class="energy-progress" id="iceEnergyProgress">0/30</div>
+        <div class="energy-bar">
+          <div class="energy-fill" id="iceEnergyFill"></div>
+        </div>
+        <div class="frozen-time-countdown" style="display: none;"></div>
+      </div>
+      <div class="energy-meter">
+        <div class="energy-title">Leaf Dragon</div>
+        <div class="energy-progress" id="leafEnergyProgress">0/30</div>
+        <div class="energy-bar">
+          <div class="energy-fill" id="leafEnergyFill"></div>
+        </div>
+        <div class="blessing-countdown" style="display: none;"></div>
+      </div>
+      <div class="energy-meter">
+        <div class="energy-title">Earth Dragon</div>
+        <div class="energy-progress" id="earthEnergyProgress">0/30</div>
+        <div class="energy-bar">
+          <div class="energy-fill" id="earthEnergyFill"></div>
+        </div>
+      </div>
+    </div>
+    <div id="gameContainer"></div>
+  </div>
 
   <div id="gameOverOverlay" class="overlay hidden">
     <div class="overlay-box">
