@@ -17,6 +17,8 @@ const GRID_OFFSET_X = 80;
 const GRID_OFFSET_Y = 80;
 const EGG_TYPES = ['fire', 'water', 'leaf', 'earth'];
 const DRAGON_TYPES = ['Fire', 'Ice', 'Leaf', 'Earth'];
+const DRAGON_SKILL_TYPES = ['fire', 'ice', 'leaf', 'earth'];
+const EARTH_TYPE = EGG_TYPES.indexOf('earth');
 const DRAGON_ENERGY_MAX = 30;
 const NORMAL_SCALE = 1;
 const SELECTED_SCALE = 1.15;
@@ -32,7 +34,10 @@ const FIRE_STORM_CENTERS = [
 let board = [];
 let tileSprites = [];
 let selectedEgg = null;
+let lastSwappedCells = [];
 let isAnimating = false;
+let isGameOver = false;
+let isResolving = false;
 let score = 0;
 let timer = TIMER_SECONDS;
 let countdownEvent;
@@ -40,7 +45,10 @@ let comboCount = 0;
 let dragonEnergy = [0, 0, 0, 0];
 let dragonEnergyText = [];
 let dragonEnergyFill = [];
+let pendingDragonSkills = [];
 let pendingFireStorm = null;
+let pendingEarthPetrify = false;
+let earthPetrifyTimeout = null;
 let scoreMultiplier = 1;
 let natureBlessingEvent = null;
 let frozenTimeActive = false;
@@ -171,6 +179,11 @@ function createTileSprite(row, col, x, y, type) {
 }
 
 function handleTileClick(row, col) {
+  if (isGameOver) {
+    console.log('Input ignored because game over');
+    return;
+  }
+
   if (isAnimating || timer <= 0) {
     return;
   }
@@ -246,11 +259,45 @@ function resetBoardVisuals() {
   }
 }
 
+function getBoardSprites() {
+  const sprites = [];
+  tileSprites.forEach((rowSprites) => {
+    rowSprites.forEach((sprite) => {
+      if (sprite) {
+        sprites.push(sprite);
+      }
+    });
+  });
+  return sprites;
+}
+
+function disableBoardInput() {
+  getBoardSprites().forEach((sprite) => {
+    try { sprite.disableInteractive(); } catch (e) {}
+  });
+}
+
+function enableBoardInput() {
+  getBoardSprites().forEach((sprite) => {
+    try { sprite.setInteractive(); } catch (e) {}
+  });
+}
+
+function stopBoardTweens() {
+  if (!gameInstance || !gameInstance.tweens) return;
+  gameInstance.tweens.killTweensOf(getBoardSprites());
+}
+
 function isAdjacent(a, b) {
   return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
 }
 
 function swapEggs(first, second) {
+  if (isGameOver) {
+    console.log('Input ignored because game over');
+    return;
+  }
+
   if (!first || !second) {
     return;
   }
@@ -278,6 +325,11 @@ function swapEggs(first, second) {
     duration: 180,
     ease: 'Power2',
     onComplete: () => {
+      if (isGameOver) {
+        console.log('Resolve stopped because game over');
+        return;
+      }
+
       tileSprites[first.row][first.col] = secondSprite;
       tileSprites[second.row][second.col] = firstSprite;
       updateSpriteData(firstSprite, second.row, second.col);
@@ -286,6 +338,7 @@ function swapEggs(first, second) {
       const patterns = detectPatterns();
       if (patterns.length === 0) {
         console.log('no match, swapping back');
+        lastSwappedCells = [];
         swapCells(first, second);
         gameInstance.tweens.add({
           targets: firstSprite,
@@ -301,6 +354,11 @@ function swapEggs(first, second) {
           duration: 180,
           ease: 'Power2',
           onComplete: () => {
+            if (isGameOver) {
+              console.log('Resolve stopped because game over');
+              return;
+            }
+
             tileSprites[first.row][first.col] = firstSprite;
             tileSprites[second.row][second.col] = secondSprite;
             updateSpriteData(firstSprite, first.row, first.col);
@@ -313,6 +371,11 @@ function swapEggs(first, second) {
       }
 
       console.log('swap completed');
+      lastSwappedCells = [
+        { row: second.row, col: second.col },
+        { row: first.row, col: first.col }
+      ];
+      console.log('lastSwappedCells', lastSwappedCells);
       selectedEgg = null;
       // Manual match start: set combo to 1 and show feedback
       comboCount = 1;
@@ -343,12 +406,14 @@ function detectPatterns() {
         const tiles = [];
         for (let c = col; c < end; c++) tiles.push({ row, col: c });
         const type = len >= 5 ? 'match5' : len === 4 ? 'match4' : 'match3';
+        const centerCell = type === 'match4' ? selectMatch4CenterCell(tiles) : null;
         addEffect({
           type,
           priority: type === 'match5' ? 5 : type === 'match4' ? 4 : 3,
           eggType: current,
           matchedCells: tiles,
           direction: 'horizontal',
+          centerCell,
         });
       }
       col = end;
@@ -367,12 +432,14 @@ function detectPatterns() {
         const tiles = [];
         for (let r = row; r < end; r++) tiles.push({ row: r, col });
         const type = len >= 5 ? 'match5' : len === 4 ? 'match4' : 'match3';
+        const centerCell = type === 'match4' ? selectMatch4CenterCell(tiles) : null;
         addEffect({
           type,
           priority: type === 'match5' ? 5 : type === 'match4' ? 4 : 3,
           eggType: current,
           matchedCells: tiles,
           direction: 'vertical',
+          centerCell,
         });
       }
       row = end;
@@ -520,7 +587,41 @@ function uniqPositions(tiles) {
   return Object.values(unique);
 }
 
+function sortCellsForLine(cells) {
+  return cells.slice().sort((a, b) => {
+    if (a.row !== b.row) {
+      return a.row - b.row;
+    }
+    return a.col - b.col;
+  });
+}
+
+function selectMatch4CenterCell(matchedCells) {
+  const sortedCells = sortCellsForLine(matchedCells);
+  console.log('lastSwappedCells', lastSwappedCells);
+  console.log('Match 4 matchedCells', sortedCells);
+
+  const swappedCell = lastSwappedCells.find((swapped) => (
+    sortedCells.some((cell) => cell.row === swapped.row && cell.col === swapped.col)
+  ));
+
+  if (swappedCell) {
+    console.log('Match 4 center selected from swapped cell', swappedCell.row, swappedCell.col);
+    return { row: swappedCell.row, col: swappedCell.col };
+  }
+
+  const fallbackCell = sortedCells[2] || sortedCells[Math.floor(sortedCells.length / 2)];
+  console.log('Match 4 fallback center used', fallbackCell.row, fallbackCell.col);
+  return { row: fallbackCell.row, col: fallbackCell.col };
+}
+
 function resolveBoard(isAutomatic = false) {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
+  isResolving = true;
   isAnimating = true;
   deselectEgg();
   console.log('selection cleared after destroy');
@@ -529,19 +630,59 @@ function resolveBoard(isAutomatic = false) {
   let firstStep = !isAutomatic;
 
   const runStep = () => {
+    if (isGameOver) {
+      isResolving = false;
+      console.log('Resolve stopped because game over');
+      return;
+    }
+
     stepNumber += 1;
     console.log('resolve step', stepNumber);
 
     const effects = detectPatterns();
     console.log('effects detected in chain', effects.length);
     if (!effects.length) {
+      if (pendingFireStorm) {
+        const destroyedCells = new Set();
+        const totalScoreGain = applyPendingFireStorm(destroyedCells);
+        destroyedCells.forEach((key) => {
+          const [row, col] = key.split('-').map(Number);
+          const type = board[row][col];
+          if (type !== null && type !== undefined) {
+            gainDragonEnergy(type);
+          }
+        });
+
+        addScore(totalScoreGain);
+        if (isGameOver) {
+          isResolving = false;
+          console.log('Resolve stopped because game over');
+          return;
+        }
+
+        animateRemovals(destroyedCells, () => {
+          if (isGameOver) {
+            isResolving = false;
+            console.log('Resolve stopped because game over');
+            return;
+          }
+          runStep();
+        });
+        return;
+      }
+
       console.log('chain finished');
-      isAnimating = false;
+      console.log('Combo chain finished');
+      isResolving = false;
       if (!isAutomatic && stepNumber === 1) {
         // if this was a manual trigger with no matches, reset combo
         comboCount = 0;
       }
       updateUi();
+      if (activatePendingDragonSkills(true)) {
+        return;
+      }
+      isAnimating = false;
       return;
     }
 
@@ -567,7 +708,8 @@ function resolveBoard(isAutomatic = false) {
           effectTargets = getAllSameType(effect.eggType);
           break;
         case 'match4':
-          effectTargets = getFullLine(effect.direction, effect.matchedCells[0]);
+          effectTargets = getMatch4Targets(effect);
+          showMatch4Beam(effect);
           break;
         case 'lshape':
         case 'tshape':
@@ -612,28 +754,7 @@ function resolveBoard(isAutomatic = false) {
       }
     });
 
-    if (pendingFireStorm) {
-      console.log('Processing pending Fire Storm');
-      const stormCells = getFireStormArea(pendingFireStorm.center);
-      console.log('Fire Storm cells to destroy:', stormCells.length);
-      let newStormDestroyed = 0;
-      stormCells.forEach((tile) => {
-        const key = `${tile.row}-${tile.col}`;
-        if (!destroyedCells.has(key)) {
-          destroyedCells.add(key);
-          newStormDestroyed += 1;
-        }
-      });
-
-      totalScoreGain += newStormDestroyed * MATCH_SCORE + 50;
-      console.log('Fire Storm destroyed eggs', stormCells.length);
-      console.log('Fire Storm bonus +50');
-      const centerX = GRID_OFFSET_X + pendingFireStorm.center.col * TILE_SIZE + TILE_SIZE / 2;
-      const centerY = GRID_OFFSET_Y + pendingFireStorm.center.row * TILE_SIZE + TILE_SIZE / 2;
-      showFireStormEffect(pendingFireStorm.center);
-      createScorePopup(centerX, centerY + 28, '+50 Bonus', 28);
-      pendingFireStorm = null;
-    }
+    totalScoreGain += applyPendingFireStorm(destroyedCells);
 
     destroyedCells.forEach((key) => {
       const [row, col] = key.split('-').map(Number);
@@ -644,8 +765,18 @@ function resolveBoard(isAutomatic = false) {
     });
 
     addScore(totalScoreGain);
+    if (isGameOver) {
+      isResolving = false;
+      console.log('Resolve stopped because game over');
+      return;
+    }
 
     animateRemovals(destroyedCells, () => {
+      if (isGameOver) {
+        isResolving = false;
+        console.log('Resolve stopped because game over');
+        return;
+      }
       runStep();
     });
   };
@@ -677,6 +808,24 @@ function getAllSameType(type) {
   return cells;
 }
 
+function getMatch4Targets(effect) {
+  const centerCell = effect.centerCell || effect.matchedCells[Math.floor(effect.matchedCells.length / 2)];
+  console.log('Match 4 center cell', centerCell.row, centerCell.col);
+
+  let lineTargets = [];
+  if (effect.direction === 'horizontal') {
+    console.log('Match 4 horizontal detected, clearing vertical column');
+    console.log('Clearing column', centerCell.col);
+    lineTargets = getFullLine('vertical', centerCell);
+  } else {
+    console.log('Match 4 vertical detected, clearing horizontal row');
+    console.log('Clearing row', centerCell.row);
+    lineTargets = getFullLine('horizontal', centerCell);
+  }
+
+  return effect.matchedCells.concat(lineTargets);
+}
+
 function getFullLine(direction, tile) {
   const cells = [];
   if (direction === 'horizontal') {
@@ -690,6 +839,37 @@ function getFullLine(direction, tile) {
   }
   return cells;
 
+}
+
+function showMatch4Beam(effect) {
+  if (!gameInstance || !effect.centerCell) return;
+
+  const center = effect.centerCell;
+  const beamX = GRID_OFFSET_X + center.col * TILE_SIZE;
+  const beamY = GRID_OFFSET_Y + center.row * TILE_SIZE;
+  const boardCenterX = GRID_OFFSET_X + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
+  const boardCenterY = GRID_OFFSET_Y + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
+  const isVerticalBeam = effect.direction === 'horizontal';
+  const beam = gameInstance.add.rectangle(
+    isVerticalBeam ? beamX : boardCenterX,
+    isVerticalBeam ? boardCenterY : beamY,
+    isVerticalBeam ? TILE_SIZE * 0.22 : GRID_SIZE * TILE_SIZE,
+    isVerticalBeam ? GRID_SIZE * TILE_SIZE : TILE_SIZE * 0.22,
+    0xffffff,
+    0.36
+  );
+  beam.setDepth(880);
+  gameInstance.tweens.add({
+    targets: beam,
+    alpha: 0,
+    scaleX: isVerticalBeam ? 1.8 : 1,
+    scaleY: isVerticalBeam ? 1 : 1.8,
+    duration: 260,
+    ease: 'Cubic.easeOut',
+    onComplete: () => {
+      try { beam.destroy(); } catch (e) {}
+    },
+  });
 }
 
 // Create a floating score popup at pixel position x,y
@@ -723,6 +903,11 @@ function pulseCombo() {
 }
 
 function animateRemovals(removalSet, onComplete) {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
   deselectEgg();
   const toRemove = Array.from(removalSet).map((key) => {
     const [row, col] = key.split('-').map(Number);
@@ -731,8 +916,20 @@ function animateRemovals(removalSet, onComplete) {
 
   if (toRemove.length === 0) {
     applyRemovals(removalSet);
+    if (isGameOver) {
+      console.log('Resolve stopped because game over');
+      return;
+    }
     applyGravity(() => {
+      if (isGameOver) {
+        console.log('Resolve stopped because game over');
+        return;
+      }
       refillBoard(() => {
+        if (isGameOver) {
+          console.log('Resolve stopped because game over');
+          return;
+        }
         console.log('gravity and refill complete');
         if (onComplete) onComplete();
       });
@@ -750,13 +947,30 @@ function animateRemovals(removalSet, onComplete) {
         duration: 180,
         ease: 'Power1',
         onComplete: () => {
+          if (isGameOver) {
+            console.log('Resolve stopped because game over');
+            return;
+          }
+
           try { entry.sprite.destroy(); } catch (e) {}
           tileSprites[entry.row][entry.col] = null;
           done += 1;
           if (done === toRemove.length) {
             applyRemovals(removalSet);
+            if (isGameOver) {
+              console.log('Resolve stopped because game over');
+              return;
+            }
             applyGravity(() => {
+              if (isGameOver) {
+                console.log('Resolve stopped because game over');
+                return;
+              }
               refillBoard(() => {
+                if (isGameOver) {
+                  console.log('Resolve stopped because game over');
+                  return;
+                }
                 console.log('gravity and refill complete');
                 if (onComplete) onComplete();
               });
@@ -765,11 +979,28 @@ function animateRemovals(removalSet, onComplete) {
         }
       });
     } else {
+      if (isGameOver) {
+        console.log('Resolve stopped because game over');
+        return;
+      }
+
       done += 1;
       if (done === toRemove.length) {
         applyRemovals(removalSet);
+        if (isGameOver) {
+          console.log('Resolve stopped because game over');
+          return;
+        }
         applyGravity(() => {
+          if (isGameOver) {
+            console.log('Resolve stopped because game over');
+            return;
+          }
           refillBoard(() => {
+            if (isGameOver) {
+              console.log('Resolve stopped because game over');
+              return;
+            }
             console.log('gravity and refill complete');
             if (onComplete) onComplete();
           });
@@ -788,6 +1019,11 @@ function applyRemovals(removalSet) {
 }
 
 function applyGravity(onComplete) {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
   console.log('gravity start');
   const tweens = [];
 
@@ -857,7 +1093,7 @@ function applyGravity(onComplete) {
   }
 
   if (tweens.length === 0) {
-    if (onComplete) onComplete();
+    if (!isGameOver && onComplete) onComplete();
     return;
   }
 
@@ -867,10 +1103,15 @@ function applyGravity(onComplete) {
     const copy = Object.assign({}, t);
     const userOnComplete = copy.onComplete;
     copy.onComplete = () => {
+      if (isGameOver) {
+        console.log('Resolve stopped because game over');
+        return;
+      }
+
       try { if (typeof userOnComplete === 'function') userOnComplete(); } catch (e) {}
       completed += 1;
       if (completed === total) {
-        if (onComplete) onComplete();
+        if (!isGameOver && onComplete) onComplete();
       }
     };
     gameInstance.tweens.add(copy);
@@ -894,6 +1135,11 @@ function collapseBoard() {
 }
 
 function refillBoard(onComplete) {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
   console.log('refill start');
   const tweens = [];
 
@@ -930,7 +1176,7 @@ function refillBoard(onComplete) {
   if (tweens.length === 0) {
     console.log('refill complete');
     resetBoardVisuals();
-    if (onComplete) onComplete();
+    if (!isGameOver && onComplete) onComplete();
     return;
   }
 
@@ -940,12 +1186,17 @@ function refillBoard(onComplete) {
     const copy = Object.assign({}, t);
     const userOnComplete = copy.onComplete;
     copy.onComplete = () => {
+      if (isGameOver) {
+        console.log('Resolve stopped because game over');
+        return;
+      }
+
       try { if (typeof userOnComplete === 'function') userOnComplete(); } catch (e) {}
       completed += 1;
       if (completed === total) {
         console.log('refill complete');
         resetBoardVisuals();
-        if (onComplete) onComplete();
+        if (!isGameOver && onComplete) onComplete();
       }
     };
     gameInstance.tweens.add(copy);
@@ -953,6 +1204,11 @@ function refillBoard(onComplete) {
 }
 
 function moveSprites(onComplete) {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
   const tweens = [];
 
   for (let row = 0; row < GRID_SIZE; row++) {
@@ -1006,6 +1262,11 @@ function moveSprites(onComplete) {
   let completed = 0;
   const total = tweens.length;
   if (total === 0) {
+    if (isGameOver) {
+      console.log('Resolve stopped because game over');
+      return;
+    }
+
     isAnimating = false;
     updateUi();
     console.log('input enabled');
@@ -1017,6 +1278,11 @@ function moveSprites(onComplete) {
     const copy = Object.assign({}, t);
     const userOnComplete = copy.onComplete;
     copy.onComplete = () => {
+      if (isGameOver) {
+        console.log('Resolve stopped because game over');
+        return;
+      }
+
       try {
         if (typeof userOnComplete === 'function') userOnComplete();
       } catch (e) {
@@ -1024,6 +1290,11 @@ function moveSprites(onComplete) {
       }
       completed += 1;
       if (completed === total) {
+        if (isGameOver) {
+          console.log('Resolve stopped because game over');
+          return;
+        }
+
         isAnimating = false;
         updateUi();
         console.log('input enabled');
@@ -1081,6 +1352,33 @@ function getFireStormArea(center) {
   return cells;
 }
 
+function applyPendingFireStorm(destroyedCells) {
+  if (!pendingFireStorm) {
+    return 0;
+  }
+
+  console.log('Processing pending Fire Storm');
+  const stormCells = getFireStormArea(pendingFireStorm.center);
+  console.log('Fire Storm cells to destroy:', stormCells.length);
+  let newStormDestroyed = 0;
+  stormCells.forEach((tile) => {
+    const key = `${tile.row}-${tile.col}`;
+    if (!destroyedCells.has(key)) {
+      destroyedCells.add(key);
+      newStormDestroyed += 1;
+    }
+  });
+
+  console.log('Fire Storm destroyed eggs', stormCells.length);
+  console.log('Fire Storm bonus +50');
+  const centerX = GRID_OFFSET_X + pendingFireStorm.center.col * TILE_SIZE + TILE_SIZE / 2;
+  const centerY = GRID_OFFSET_Y + pendingFireStorm.center.row * TILE_SIZE + TILE_SIZE / 2;
+  showFireStormEffect(pendingFireStorm.center);
+  createScorePopup(centerX, centerY + 28, '+50 Bonus', 28);
+  pendingFireStorm = null;
+  return newStormDestroyed * MATCH_SCORE + 50;
+}
+
 function triggerFireStorm() {
   // Deprecated: use activateFireDragonSkill() instead
 }
@@ -1123,6 +1421,10 @@ function showFireStormEffect(center) {
 }
 
 function gainDragonEnergy(type) {
+  if (isGameOver) {
+    return;
+  }
+
   if (type < 0 || type >= dragonEnergy.length) {
     return;
   }
@@ -1133,24 +1435,9 @@ function gainDragonEnergy(type) {
 
   if (dragonEnergy[type] >= DRAGON_ENERGY_MAX) {
     console.log(`${DRAGON_TYPES[type]} Dragon skill ready`);
-
-    if (type === 0) {
-      console.log('Fire reached 30');
-      console.log('Calling activateFireDragonSkill');
-      activateFireDragonSkill();
-    }
-
-    if (type === 1) {
-      console.log('Ice energy reached 30');
-      activateIceDragonSkill();
-    }
-
-    if (type === 2) {
-      console.log('Leaf energy reached 30');
-      activateLeafDragonSkill();
-    }
-
     dragonEnergy[type] = 0;
+    console.log('Energy reached 30, skill queued');
+    queueDragonSkill(DRAGON_SKILL_TYPES[type]);
     if (type === 1) {
       console.log('Ice energy reset to 0');
       updateUi();
@@ -1162,10 +1449,77 @@ function gainDragonEnergy(type) {
       console.log('Leaf energy reset to 0');
       updateDragonEnergyUi();
     }
+    if (type === 3) {
+      console.log('Earth energy reset to 0');
+      updateDragonEnergyUi();
+    }
   }
 }
 
+function queueDragonSkill(type) {
+  if (!type) {
+    return;
+  }
+
+  pendingDragonSkills.push(type);
+  console.log('Dragon skill queued:', type);
+  updateDragonEnergyUi();
+}
+
+function activatePendingDragonSkills(isFinalResolution = false) {
+  if (isGameOver) {
+    return false;
+  }
+
+  if (isResolving && !isFinalResolution) {
+    return false;
+  }
+
+  if (!pendingDragonSkills.length) {
+    console.log('No pending dragon skills');
+    return false;
+  }
+
+  console.log('Activating pending dragon skills');
+  while (pendingDragonSkills.length && !isGameOver) {
+    const skillType = pendingDragonSkills.shift();
+    console.log('Pending skill activated:', skillType);
+
+    if (skillType === 'fire') {
+      activateFireDragonSkill();
+      if (pendingFireStorm) {
+        resolveBoard(true);
+        return true;
+      }
+      continue;
+    }
+
+    if (skillType === 'ice') {
+      activateIceDragonSkill();
+      continue;
+    }
+
+    if (skillType === 'leaf') {
+      activateLeafDragonSkill();
+      continue;
+    }
+
+    if (skillType === 'earth') {
+      activateEarthDragonSkill();
+      if (pendingEarthPetrify || earthPetrifyTimeout) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function activateFireDragonSkill() {
+  if (isGameOver) {
+    return;
+  }
+
   const center = FIRE_STORM_CENTERS[Math.floor(Math.random() * FIRE_STORM_CENTERS.length)];
   console.log('Fire Dragon skill activated');
   console.log('Fire Storm picked center:', center.row, center.col);
@@ -1174,7 +1528,140 @@ function activateFireDragonSkill() {
   pendingFireStorm = { center };
 }
 
+function activateEarthDragonSkill() {
+  if (isGameOver) {
+    return;
+  }
+
+  console.log('Earth Dragon activated');
+  pendingEarthPetrify = true;
+  if (!isResolving) {
+    runPendingEarthPetrify();
+  }
+}
+
+function runPendingEarthPetrify() {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
+  pendingEarthPetrify = false;
+  isAnimating = true;
+  deselectEgg();
+
+  const convertedEggs = convertRandomEggsToEarth(10);
+  console.log('Petrify converted eggs:');
+  convertedEggs.forEach((egg) => {
+    console.log('row, col', egg.row, egg.col);
+  });
+
+  showPetrifyEffect(convertedEggs);
+  comboCount = 1;
+  updateUi();
+  pulseCombo();
+
+  earthPetrifyTimeout = setTimeout(() => {
+    earthPetrifyTimeout = null;
+    if (isGameOver) {
+      console.log('Resolve stopped because game over');
+      return;
+    }
+    console.log('Checking matches after Petrify');
+    resolveBoard(false);
+  }, 500);
+}
+
+function convertRandomEggsToEarth(limit) {
+  const candidates = [];
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      if (board[row][col] !== null && board[row][col] !== undefined && board[row][col] !== EARTH_TYPE) {
+        candidates.push({ row, col });
+      }
+    }
+  }
+
+  Phaser.Utils.Array.Shuffle(candidates);
+  const convertedEggs = candidates.slice(0, limit);
+  convertedEggs.forEach((egg) => {
+    board[egg.row][egg.col] = EARTH_TYPE;
+    const sprite = ensureSpriteAt(egg.row, egg.col);
+    sprite.setData('type', EARTH_TYPE);
+    sprite.setTexture(`egg-${EGG_TYPES[EARTH_TYPE]}`);
+  });
+
+  return convertedEggs;
+}
+
+function showPetrifyEffect(convertedEggs) {
+  if (!gameInstance) return;
+
+  const centerX = GRID_OFFSET_X + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
+  const centerY = GRID_OFFSET_Y + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
+  const flash = gameInstance.add.rectangle(
+    centerX,
+    centerY,
+    GRID_SIZE * TILE_SIZE,
+    GRID_SIZE * TILE_SIZE,
+    0x8a5a2b,
+    0.26
+  );
+  flash.setDepth(850);
+  gameInstance.tweens.add({
+    targets: flash,
+    alpha: 0,
+    duration: 420,
+    ease: 'Cubic.easeOut',
+    onComplete: () => {
+      try { flash.destroy(); } catch (e) {}
+    },
+  });
+
+  const petrifyText = gameInstance.add.text(centerX, centerY - 18, 'Petrify!', {
+    font: '34px Arial',
+    fill: '#d8aa55',
+    stroke: '#2f1d0f',
+    strokeThickness: 7,
+  }).setOrigin(0.5);
+  petrifyText.setDepth(1000);
+  gameInstance.tweens.add({
+    targets: petrifyText,
+    y: centerY - 62,
+    alpha: 0,
+    duration: 1000,
+    ease: 'Power1',
+    onComplete: () => {
+      try { petrifyText.destroy(); } catch (e) {}
+    },
+  });
+
+  convertedEggs.forEach((egg) => {
+    const sprite = tileSprites[egg.row] && tileSprites[egg.row][egg.col];
+    if (!sprite) return;
+    sprite.setTint(0xc49a5c);
+    gameInstance.tweens.add({
+      targets: sprite,
+      scale: 1.22,
+      duration: 140,
+      yoyo: true,
+      repeat: 1,
+      ease: 'Sine.easeInOut',
+      onComplete: () => {
+        sprite.setScale(NORMAL_SCALE);
+        sprite.displayWidth = TILE_SIZE * 0.8;
+        sprite.displayHeight = TILE_SIZE * 0.95;
+        sprite.clearTint();
+      },
+    });
+  });
+}
+
 function activateLeafDragonSkill() {
+  if (isGameOver) {
+    return;
+  }
+
   console.log('Leaf Dragon skill activated');
   
   if (natureBlessingEvent) {
@@ -1227,6 +1714,10 @@ function deactivateNatureBlessing() {
 }
 
 function activateIceDragonSkill() {
+  if (isGameOver) {
+    return;
+  }
+
   console.log('Ice Dragon skill activated - Frozen Time!');
   
   if (frozenTimeEvent) {
@@ -1291,7 +1782,36 @@ function flashFrozenTimer() {
   timerStat.classList.add('frozen-timer-glow');
 }
 
+function clearDragonSkillUi() {
+  const leafMeterElement = document.querySelector('.energy-meter:nth-child(3)');
+  if (leafMeterElement) {
+    leafMeterElement.classList.remove('nature-blessing-active');
+    const countdownElement = leafMeterElement.querySelector('.blessing-countdown');
+    if (countdownElement) {
+      countdownElement.style.display = 'none';
+    }
+  }
+
+  const iceMeterElement = document.querySelector('.energy-meter:nth-child(2)');
+  if (iceMeterElement) {
+    iceMeterElement.classList.remove('frozen-time-active');
+    const countdownElement = iceMeterElement.querySelector('.frozen-time-countdown');
+    if (countdownElement) {
+      countdownElement.style.display = 'none';
+    }
+  }
+
+  const timerStat = timerText ? timerText.closest('.stat') : null;
+  if (timerStat) {
+    timerStat.classList.remove('frozen-timer-glow');
+  }
+}
+
 function addScore(baseScore) {
+  if (isGameOver) {
+    return;
+  }
+
   const finalScore = baseScore * scoreMultiplier;
   console.log('Base score:', baseScore);
   console.log('Final score:', finalScore);
@@ -1345,6 +1865,10 @@ function startTimer() {
   countdownEvent = gameInstance.time.addEvent({
     delay: 1000,
     callback: () => {
+      if (isGameOver) {
+        return;
+      }
+
       if (timer <= 0) {
         return;
       }
@@ -1362,28 +1886,83 @@ function startTimer() {
 }
 
 function endGame() {
-  finalScoreText.textContent = score;
-  gameOverOverlay.classList.remove('hidden');
-  isAnimating = true;
-}
+  if (isGameOver) {
+    return;
+  }
 
-function resetGame() {
-  gameOverOverlay.classList.add('hidden');
-  score = 0;
-  comboCount = 0;
-  dragonEnergy = [0, 0, 0, 0];
-  isAnimating = false;
-  frozenTimeActive = false;
-  frozenTimeRemaining = 0;
+  console.log('Game over: freezing board');
+  isGameOver = true;
+  isResolving = false;
+  isAnimating = true;
+  lastSwappedCells = [];
+  pendingDragonSkills = [];
+  pendingFireStorm = null;
+  pendingEarthPetrify = false;
+  if (earthPetrifyTimeout) {
+    clearTimeout(earthPetrifyTimeout);
+    earthPetrifyTimeout = null;
+  }
+  if (natureBlessingEvent) {
+    clearTimeout(natureBlessingEvent);
+    natureBlessingEvent = null;
+  }
   if (frozenTimeEvent) {
     clearTimeout(frozenTimeEvent);
     frozenTimeEvent = null;
   }
+  frozenTimeActive = false;
+  frozenTimeRemaining = 0;
+  scoreMultiplier = 1;
+  clearDragonSkillUi();
+  deselectEgg();
+  selectedEgg = null;
+  disableBoardInput();
+  stopBoardTweens();
+  if (countdownEvent) {
+    countdownEvent.remove(false);
+    countdownEvent = null;
+  }
+  finalScoreText.textContent = score;
+  gameOverOverlay.classList.remove('hidden');
+}
+
+function resetGame() {
+  gameOverOverlay.classList.add('hidden');
+  isGameOver = false;
+  isResolving = false;
+  score = 0;
+  comboCount = 0;
+  timer = TIMER_SECONDS;
+  dragonEnergy = [0, 0, 0, 0];
+  isAnimating = false;
+  selectedEgg = null;
+  lastSwappedCells = [];
+  pendingDragonSkills = [];
+  pendingFireStorm = null;
+  pendingEarthPetrify = false;
+  if (earthPetrifyTimeout) {
+    clearTimeout(earthPetrifyTimeout);
+    earthPetrifyTimeout = null;
+  }
+  scoreMultiplier = 1;
+  frozenTimeActive = false;
+  frozenTimeRemaining = 0;
+  if (natureBlessingEvent) {
+    clearTimeout(natureBlessingEvent);
+    natureBlessingEvent = null;
+  }
+  if (frozenTimeEvent) {
+    clearTimeout(frozenTimeEvent);
+    frozenTimeEvent = null;
+  }
+  clearDragonSkillUi();
   clearBoardSprites();
   initializeBoard();
   createBoardSprites();
+  enableBoardInput();
   startTimer();
   updateUi();
+  console.log('Restart: game state reset');
 }
 
 function clearBoardSprites() {
