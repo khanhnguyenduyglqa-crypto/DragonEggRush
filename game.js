@@ -1,8 +1,19 @@
+const GRID_SIZE = 6;
+const ROWS = GRID_SIZE;
+const COLS = GRID_SIZE;
+const TILE_SIZE = 100;
+const BOARD_RENDER_WIDTH = COLS * TILE_SIZE;
+const BOARD_RENDER_HEIGHT = ROWS * TILE_SIZE;
+// Playable inset for eggs: keeps sprites inside the decorative frame.
+const BOARD_INSET_X = 48;
+const BOARD_INSET_Y = 48;
+const EGG_SIZE_RATIO = 0.72;
+
 const config = {
   type: Phaser.AUTO,
   parent: 'gameContainer',
-  width: 760,
-  height: 760,
+  width: BOARD_RENDER_WIDTH,
+  height: BOARD_RENDER_HEIGHT,
   backgroundColor: '#0d0a1f',
   scene: {
     preload: preload,
@@ -10,12 +21,29 @@ const config = {
     update: update,
   },
 };
-
-const GRID_SIZE = 6;
-const TILE_SIZE = 100;
-const GRID_OFFSET_X = 80;
-const GRID_OFFSET_Y = 80;
 const EGG_TYPES = ['fire', 'water', 'leaf', 'earth'];
+const EGG_VISUALS = [
+  {
+    key: 'egg-fire',
+    path: 'assets/eggs/fire.png',
+    fallbackColor: 0xff4d4d,
+  },
+  {
+    key: 'egg-ice',
+    path: 'assets/eggs/ice.png',
+    fallbackColor: 0x4d8bff,
+  },
+  {
+    key: 'egg-leaf',
+    path: 'assets/eggs/leaf.png',
+    fallbackColor: 0x5ec25e,
+  },
+  {
+    key: 'egg-earth',
+    path: 'assets/eggs/earth.png',
+    fallbackColor: 0xd8aa55,
+  },
+];
 const DRAGON_TYPES = ['Fire', 'Ice', 'Leaf', 'Earth'];
 const DRAGON_SKILL_TYPES = ['fire', 'ice', 'leaf', 'earth'];
 const EARTH_TYPE = EGG_TYPES.indexOf('earth');
@@ -24,6 +52,10 @@ const NORMAL_SCALE = 1;
 const SELECTED_SCALE = 1.15;
 const MATCH_SCORE = 10;
 const TIMER_SECONDS = 90;
+const DEFAULT_BOARD_SKIN = {
+  key: 'board-default',
+  path: 'assets/boards/default_board.png',
+};
 const FIRE_STORM_CENTERS = [
   { row: 2, col: 2 },
   { row: 2, col: 3 },
@@ -38,6 +70,7 @@ let lastSwappedCells = [];
 let isAnimating = false;
 let isGameOver = false;
 let isResolving = false;
+let gameStarted = false;
 let score = 0;
 let timer = TIMER_SECONDS;
 let countdownEvent;
@@ -62,9 +95,13 @@ let finalScoreText;
 let restartButton;
 let overlayRestartButton;
 let gameInstance;
+let boardSkinSprite;
 
 function preload() {
-  // No external files required; textures are generated in create().
+  this.load.image(DEFAULT_BOARD_SKIN.key, DEFAULT_BOARD_SKIN.path);
+  EGG_VISUALS.forEach((egg) => {
+    this.load.image(egg.key, egg.path);
+  });
 }
 
 function create() {
@@ -86,29 +123,34 @@ function create() {
   overlayRestartButton.addEventListener('click', resetGame);
 
   initializeBoard();
+  createBoardSkinLayer();
   createBoardSprites();
-  startTimer();
   updateUi();
+  console.log('Game waiting for first move');
 }
 
 function generateEggTextures() {
-  const colors = [0xff4d4d, 0x4d8bff, 0x5ec25e, 0xd8aa55];
   const width = 120;
   const height = 140;
   const radius = 36;
   const offsetY = 10;
 
   const graphics = gameInstance.make.graphics({ x: 0, y: 0, add: false });
-  EGG_TYPES.forEach((type, index) => {
+  EGG_VISUALS.forEach((egg) => {
+    if (gameInstance.textures.exists(egg.key)) {
+      return;
+    }
+
     graphics.clear();
-    graphics.fillStyle(colors[index], 1);
+    graphics.fillStyle(egg.fallbackColor, 1);
     graphics.fillEllipse(width / 2, height / 2 + offsetY, radius, radius * 1.25);
     graphics.lineStyle(4, 0xffffff, 0.24);
     graphics.strokeEllipse(width / 2, height / 2 + offsetY, radius, radius * 1.25);
     graphics.fillStyle(0xffffff, 0.22);
     graphics.fillEllipse(width / 2 + 10, height / 2 - 10 + offsetY, radius * 0.24, radius * 0.14);
-    graphics.generateTexture(`egg-${type}`, width, height);
+    graphics.generateTexture(egg.key, width, height);
   });
+  graphics.destroy();
 }
 
 function update() {
@@ -148,19 +190,104 @@ function createBoardSprites() {
   for (let row = 0; row < GRID_SIZE; row++) {
     tileSprites[row] = [];
     for (let col = 0; col < GRID_SIZE; col++) {
-      const x = GRID_OFFSET_X + col * TILE_SIZE;
-      const y = GRID_OFFSET_Y + row * TILE_SIZE;
-      tileSprites[row][col] = createTileSprite(row, col, x, y, board[row][col]);
+      const position = getEggPosition(row, col);
+      tileSprites[row][col] = createTileSprite(row, col, position.x, position.y, board[row][col]);
     }
   }
 }
 
+function createBoardSkinLayer() {
+  const metrics = getBoardMetrics();
+  console.log('boardX', metrics.boardX);
+  console.log('boardY', metrics.boardY);
+  console.log('boardWidth', metrics.boardWidth);
+  console.log('boardHeight', metrics.boardHeight);
+  console.log('playableX', metrics.playableX);
+  console.log('playableY', metrics.playableY);
+  console.log('playableWidth', metrics.playableWidth);
+  console.log('playableHeight', metrics.playableHeight);
+  console.log('cellWidth', metrics.cellWidth);
+  console.log('cellHeight', metrics.cellHeight);
+
+  // Board uses default background only. Dragon skills use visual effects instead of board skin switching.
+  boardSkinSprite = gameInstance.add.image(metrics.boardX, metrics.boardY, DEFAULT_BOARD_SKIN.key);
+  boardSkinSprite.setOrigin(0, 0);
+  boardSkinSprite.setDisplaySize(metrics.boardWidth, metrics.boardHeight);
+  boardSkinSprite.setDepth(0);
+}
+
+function getBoardMetrics() {
+  // Board image position: the decorative frame starts at the canvas origin.
+  const boardX = 0;
+  const boardY = 0;
+  const boardWidth = BOARD_RENDER_WIDTH;
+  const boardHeight = BOARD_RENDER_HEIGHT;
+  const playableX = boardX + BOARD_INSET_X;
+  const playableY = boardY + BOARD_INSET_Y;
+  const playableWidth = boardWidth - BOARD_INSET_X * 2;
+  const playableHeight = boardHeight - BOARD_INSET_Y * 2;
+  const cellWidth = playableWidth / COLS;
+  const cellHeight = playableHeight / ROWS;
+
+  return {
+    boardX,
+    boardY,
+    boardWidth,
+    boardHeight,
+    playableX,
+    playableY,
+    playableWidth,
+    playableHeight,
+    cellWidth,
+    cellHeight,
+  };
+}
+
+function getEggPosition(row, col) {
+  const metrics = getBoardMetrics();
+  return {
+    x: metrics.playableX + col * metrics.cellWidth + metrics.cellWidth / 2,
+    y: metrics.playableY + row * metrics.cellHeight + metrics.cellHeight / 2,
+  };
+}
+
+function getPlayableBoardCenter() {
+  const metrics = getBoardMetrics();
+  return {
+    x: metrics.playableX + metrics.playableWidth / 2,
+    y: metrics.playableY + metrics.playableHeight / 2,
+  };
+}
+
+function setEggDisplaySize(sprite) {
+  const scale = getEggScale(sprite);
+  sprite.setScale(scale.x, scale.y);
+}
+
+function getEggScale(sprite, ratio = 1) {
+  const metrics = getBoardMetrics();
+  const eggSize = Math.min(metrics.cellWidth, metrics.cellHeight) * EGG_SIZE_RATIO;
+  return {
+    x: (eggSize / sprite.width) * ratio,
+    y: (eggSize / sprite.height) * ratio,
+  };
+}
+
+function setEggSelectedSize(sprite) {
+  const scale = getEggScale(sprite, SELECTED_SCALE);
+  sprite.setScale(scale.x, scale.y);
+}
+
+function getEggTextureKey(type) {
+  const egg = EGG_VISUALS[type];
+  return egg ? egg.key : EGG_VISUALS[0].key;
+}
+
 function createTileSprite(row, col, x, y, type) {
-  const texture = `egg-${EGG_TYPES[type]}`;
+  const texture = getEggTextureKey(type);
   const sprite = gameInstance.add.sprite(x, y, texture).setInteractive();
-  sprite.setScale(NORMAL_SCALE);
-  sprite.displayWidth = TILE_SIZE * 0.8;
-  sprite.displayHeight = TILE_SIZE * 0.95;
+  sprite.setDepth(10);
+  setEggDisplaySize(sprite);
   sprite.setAlpha(1);
   sprite.clearTint();
   sprite.setData('row', row);
@@ -221,7 +348,7 @@ function selectEgg(egg) {
   selectedEgg = egg;
   const sprite = tileSprites[egg.row] && tileSprites[egg.row][egg.col];
   if (sprite) {
-    sprite.setScale(SELECTED_SCALE);
+    setEggSelectedSize(sprite);
     sprite.setTint(0xffffff);
   }
 }
@@ -237,8 +364,7 @@ function resetEggVisual(egg) {
   const sprite = tileSprites[egg.row] && tileSprites[egg.row][egg.col];
   if (sprite) {
     sprite.setScale(NORMAL_SCALE);
-    sprite.displayWidth = TILE_SIZE * 0.8;
-    sprite.displayHeight = TILE_SIZE * 0.95;
+    setEggDisplaySize(sprite);
     sprite.setAlpha(1);
     sprite.clearTint();
   }
@@ -250,8 +376,7 @@ function resetBoardVisuals() {
       const sprite = tileSprites[row] && tileSprites[row][col];
       if (sprite) {
         sprite.setScale(NORMAL_SCALE);
-        sprite.displayWidth = TILE_SIZE * 0.8;
-        sprite.displayHeight = TILE_SIZE * 0.95;
+        setEggDisplaySize(sprite);
         sprite.setAlpha(1);
         sprite.clearTint();
       }
@@ -371,6 +496,11 @@ function swapEggs(first, second) {
       }
 
       console.log('swap completed');
+      if (!gameStarted) {
+        gameStarted = true;
+        console.log('First valid move detected');
+        startTimer();
+      }
       lastSwappedCells = [
         { row: second.row, col: second.col },
         { row: first.row, col: first.col }
@@ -510,8 +640,9 @@ function ensureSpriteAt(row, col) {
   if (!tileSprites[row]) tileSprites[row] = [];
   let sprite = tileSprites[row][col];
   const type = board[row] && typeof board[row][col] !== 'undefined' ? board[row][col] : Phaser.Math.Between(0, EGG_TYPES.length - 1);
-  const x = GRID_OFFSET_X + col * TILE_SIZE;
-  const y = GRID_OFFSET_Y + row * TILE_SIZE;
+  const position = getEggPosition(row, col);
+  const x = position.x;
+  const y = position.y;
   if (!sprite) {
     sprite = createTileSprite(row, col, x, y, type);
     tileSprites[row][col] = sprite;
@@ -521,8 +652,7 @@ function ensureSpriteAt(row, col) {
   sprite.x = x;
   sprite.y = y;
   sprite.setScale(NORMAL_SCALE);
-  sprite.displayWidth = TILE_SIZE * 0.8;
-  sprite.displayHeight = TILE_SIZE * 0.95;
+  setEggDisplaySize(sprite);
   sprite.setAlpha(1);
   sprite.clearTint();
   sprite.setInteractive();
@@ -727,8 +857,9 @@ function resolveBoard(isAutomatic = false) {
 
       let newDestroyed = 0;
       const sampleTile = effect.centerCell || effect.matchedCells[0] || { row: 0, col: 0 };
-      const px = GRID_OFFSET_X + sampleTile.col * TILE_SIZE + TILE_SIZE / 2;
-      const py = GRID_OFFSET_Y + sampleTile.row * TILE_SIZE + TILE_SIZE / 2;
+      const popupPosition = getEggPosition(sampleTile.row, sampleTile.col);
+      const px = popupPosition.x;
+      const py = popupPosition.y;
       const isBigPopup = effect.type === 'match5' || effect.type === 'match4' || effect.type === 'lshape' || effect.type === 'tshape';
 
       effectTargets.forEach((tile) => {
@@ -845,16 +976,15 @@ function showMatch4Beam(effect) {
   if (!gameInstance || !effect.centerCell) return;
 
   const center = effect.centerCell;
-  const beamX = GRID_OFFSET_X + center.col * TILE_SIZE;
-  const beamY = GRID_OFFSET_Y + center.row * TILE_SIZE;
-  const boardCenterX = GRID_OFFSET_X + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
-  const boardCenterY = GRID_OFFSET_Y + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
+  const metrics = getBoardMetrics();
+  const beamPosition = getEggPosition(center.row, center.col);
+  const boardCenter = getPlayableBoardCenter();
   const isVerticalBeam = effect.direction === 'horizontal';
   const beam = gameInstance.add.rectangle(
-    isVerticalBeam ? beamX : boardCenterX,
-    isVerticalBeam ? boardCenterY : beamY,
-    isVerticalBeam ? TILE_SIZE * 0.22 : GRID_SIZE * TILE_SIZE,
-    isVerticalBeam ? GRID_SIZE * TILE_SIZE : TILE_SIZE * 0.22,
+    isVerticalBeam ? beamPosition.x : boardCenter.x,
+    isVerticalBeam ? boardCenter.y : beamPosition.y,
+    isVerticalBeam ? metrics.cellWidth * 0.22 : metrics.playableWidth,
+    isVerticalBeam ? metrics.playableHeight : metrics.cellHeight * 0.22,
     0xffffff,
     0.36
   );
@@ -1038,8 +1168,7 @@ function applyGravity(onComplete) {
         }
         if (sprite) {
           sprite.setScale(NORMAL_SCALE);
-          sprite.displayWidth = TILE_SIZE * 0.8;
-          sprite.displayHeight = TILE_SIZE * 0.95;
+          setEggDisplaySize(sprite);
           sprite.setAlpha(1);
           sprite.clearTint();
         }
@@ -1057,8 +1186,9 @@ function applyGravity(onComplete) {
     let targetRow = GRID_SIZE - 1;
     existingEggs.forEach((egg) => {
       board[targetRow][col] = egg.type;
-      const targetX = GRID_OFFSET_X + col * TILE_SIZE;
-      const targetY = GRID_OFFSET_Y + targetRow * TILE_SIZE;
+      const targetPosition = getEggPosition(targetRow, col);
+      const targetX = targetPosition.x;
+      const targetY = targetPosition.y;
       tileSprites[targetRow][col] = egg.sprite;
       egg.sprite.setData('row', targetRow);
       egg.sprite.setData('col', col);
@@ -1148,24 +1278,26 @@ function refillBoard(onComplete) {
       if (board[row][col] === null || board[row][col] === undefined) {
         const type = Phaser.Math.Between(0, EGG_TYPES.length - 1);
         board[row][col] = type;
-        const destinationX = GRID_OFFSET_X + col * TILE_SIZE;
-        const destinationY = GRID_OFFSET_Y + row * TILE_SIZE;
-        const startY = destinationY - TILE_SIZE * 1.5;
+        const destinationPosition = getEggPosition(row, col);
+        const destinationX = destinationPosition.x;
+        const destinationY = destinationPosition.y;
+        const startY = destinationY - getBoardMetrics().cellHeight * 1.5;
         let sprite = tileSprites[row] && tileSprites[row][col];
         if (sprite) {
           sprite.destroy();
         }
         sprite = createTileSprite(row, col, destinationX, startY, type);
         sprite.alpha = 0;
-        sprite.setScale(NORMAL_SCALE);
         tileSprites[row][col] = sprite;
+        const targetScale = getEggScale(sprite);
         console.log('new egg spawned above board', row, col, type);
         tweens.push({
           targets: sprite,
           x: destinationX,
           y: destinationY,
           alpha: 1,
-          scale: 1,
+          scaleX: targetScale.x,
+          scaleY: targetScale.y,
           duration: 220,
           ease: 'Power2',
         });
@@ -1215,23 +1347,24 @@ function moveSprites(onComplete) {
     for (let col = 0; col < GRID_SIZE; col++) {
       let sprite = tileSprites[row][col];
       const type = board[row][col];
-      const destinationX = GRID_OFFSET_X + col * TILE_SIZE;
-      const destinationY = GRID_OFFSET_Y + row * TILE_SIZE;
+      const destinationPosition = getEggPosition(row, col);
+      const destinationX = destinationPosition.x;
+      const destinationY = destinationPosition.y;
 
       if (!sprite || sprite.getData('type') === null) {
         if (sprite) {
           sprite.destroy();
         }
-        sprite = createTileSprite(row, col, destinationX, destinationY - TILE_SIZE, type);
+        sprite = createTileSprite(row, col, destinationX, destinationY - getBoardMetrics().cellHeight, type);
         sprite.alpha = 0;
-        sprite.setScale(NORMAL_SCALE);
         tileSprites[row][col] = sprite;
         console.log('new egg interactive added', row, col, type);
       } else {
         sprite.setData('row', row);
         sprite.setData('col', col);
         sprite.setData('type', type);
-        sprite.setTexture(`egg-${EGG_TYPES[type]}`);
+        sprite.setTexture(getEggTextureKey(type));
+        setEggDisplaySize(sprite);
         // ensure sprite remains interactive and has correct handler
         sprite.setInteractive();
         // remove any previous handler and attach a fresh one that reads current data
@@ -1246,12 +1379,14 @@ function moveSprites(onComplete) {
         console.log('interactive attached', row, col);
       }
 
+      const targetScale = getEggScale(sprite);
       tweens.push({
         targets: sprite,
         x: destinationX,
         y: destinationY,
         alpha: 1,
-        scale: 1,
+        scaleX: targetScale.x,
+        scaleY: targetScale.y,
         duration: 220,
         ease: 'Power2',
       });
@@ -1325,6 +1460,20 @@ function updateDragonEnergyUi() {
   });
 }
 
+function pulseDragonEnergyReady(index) {
+  const meter = document.querySelectorAll('.energy-meter')[index];
+  if (!meter) {
+    return;
+  }
+
+  meter.classList.remove('dragon-energy-ready');
+  void meter.offsetWidth;
+  meter.classList.add('dragon-energy-ready');
+  setTimeout(() => {
+    meter.classList.remove('dragon-energy-ready');
+  }, 650);
+}
+
 function getRandomBoardCell() {
   const validCells = [];
   for (let row = 0; row < GRID_SIZE; row++) {
@@ -1371,8 +1520,9 @@ function applyPendingFireStorm(destroyedCells) {
 
   console.log('Fire Storm destroyed eggs', stormCells.length);
   console.log('Fire Storm bonus +50');
-  const centerX = GRID_OFFSET_X + pendingFireStorm.center.col * TILE_SIZE + TILE_SIZE / 2;
-  const centerY = GRID_OFFSET_Y + pendingFireStorm.center.row * TILE_SIZE + TILE_SIZE / 2;
+  const centerPosition = getEggPosition(pendingFireStorm.center.row, pendingFireStorm.center.col);
+  const centerX = centerPosition.x;
+  const centerY = centerPosition.y;
   showFireStormEffect(pendingFireStorm.center);
   createScorePopup(centerX, centerY + 28, '+50 Bonus', 28);
   pendingFireStorm = null;
@@ -1385,8 +1535,9 @@ function triggerFireStorm() {
 
 function showFireStormEffect(center) {
   if (!gameInstance) return;
-  const x = GRID_OFFSET_X + center.col * TILE_SIZE;
-  const y = GRID_OFFSET_Y + center.row * TILE_SIZE;
+  const position = getEggPosition(center.row, center.col);
+  const x = position.x;
+  const y = position.y;
 
   const explosion = gameInstance.add.circle(x, y, 24, 0xff6600, 0.75);
   explosion.setDepth(900);
@@ -1435,6 +1586,7 @@ function gainDragonEnergy(type) {
 
   if (dragonEnergy[type] >= DRAGON_ENERGY_MAX) {
     console.log(`${DRAGON_TYPES[type]} Dragon skill ready`);
+    pulseDragonEnergyReady(type);
     dragonEnergy[type] = 0;
     console.log('Energy reached 30, skill queued');
     queueDragonSkill(DRAGON_SKILL_TYPES[type]);
@@ -1588,7 +1740,8 @@ function convertRandomEggsToEarth(limit) {
     board[egg.row][egg.col] = EARTH_TYPE;
     const sprite = ensureSpriteAt(egg.row, egg.col);
     sprite.setData('type', EARTH_TYPE);
-    sprite.setTexture(`egg-${EGG_TYPES[EARTH_TYPE]}`);
+    sprite.setTexture(getEggTextureKey(EARTH_TYPE));
+    setEggDisplaySize(sprite);
   });
 
   return convertedEggs;
@@ -1597,13 +1750,15 @@ function convertRandomEggsToEarth(limit) {
 function showPetrifyEffect(convertedEggs) {
   if (!gameInstance) return;
 
-  const centerX = GRID_OFFSET_X + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
-  const centerY = GRID_OFFSET_Y + ((GRID_SIZE - 1) * TILE_SIZE) / 2;
+  const metrics = getBoardMetrics();
+  const boardCenter = getPlayableBoardCenter();
+  const centerX = boardCenter.x;
+  const centerY = boardCenter.y;
   const flash = gameInstance.add.rectangle(
     centerX,
     centerY,
-    GRID_SIZE * TILE_SIZE,
-    GRID_SIZE * TILE_SIZE,
+    metrics.playableWidth,
+    metrics.playableHeight,
     0x8a5a2b,
     0.26
   );
@@ -1640,17 +1795,17 @@ function showPetrifyEffect(convertedEggs) {
     const sprite = tileSprites[egg.row] && tileSprites[egg.row][egg.col];
     if (!sprite) return;
     sprite.setTint(0xc49a5c);
+    const petrifyScale = getEggScale(sprite, 1.22);
     gameInstance.tweens.add({
       targets: sprite,
-      scale: 1.22,
+      scaleX: petrifyScale.x,
+      scaleY: petrifyScale.y,
       duration: 140,
       yoyo: true,
       repeat: 1,
       ease: 'Sine.easeInOut',
       onComplete: () => {
-        sprite.setScale(NORMAL_SCALE);
-        sprite.displayWidth = TILE_SIZE * 0.8;
-        sprite.displayHeight = TILE_SIZE * 0.95;
+        setEggDisplaySize(sprite);
         sprite.clearTint();
       },
     });
@@ -1861,7 +2016,6 @@ function startTimer() {
   if (countdownEvent) {
     countdownEvent.remove(false);
   }
-  timer = TIMER_SECONDS;
   countdownEvent = gameInstance.time.addEvent({
     delay: 1000,
     callback: () => {
@@ -1883,6 +2037,7 @@ function startTimer() {
     },
     loop: true,
   });
+  console.log('Timer started');
 }
 
 function endGame() {
@@ -1930,6 +2085,7 @@ function resetGame() {
   gameOverOverlay.classList.add('hidden');
   isGameOver = false;
   isResolving = false;
+  gameStarted = false;
   score = 0;
   comboCount = 0;
   timer = TIMER_SECONDS;
@@ -1943,6 +2099,10 @@ function resetGame() {
   if (earthPetrifyTimeout) {
     clearTimeout(earthPetrifyTimeout);
     earthPetrifyTimeout = null;
+  }
+  if (countdownEvent) {
+    countdownEvent.remove(false);
+    countdownEvent = null;
   }
   scoreMultiplier = 1;
   frozenTimeActive = false;
@@ -1960,8 +2120,8 @@ function resetGame() {
   initializeBoard();
   createBoardSprites();
   enableBoardInput();
-  startTimer();
   updateUi();
+  console.log('Game waiting for first move');
   console.log('Restart: game state reset');
 }
 

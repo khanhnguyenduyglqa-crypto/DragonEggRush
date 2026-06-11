@@ -6,7 +6,16 @@
 
 body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background: radial-gradient(circle at top, #150f26 0%, #050309 100%);
+  /* Fallback background: keeps the current gradient visible if no custom art exists yet. */
+  /* Custom background image location: assets/backgrounds/main_bg.png */
+  background:
+    linear-gradient(rgba(5, 3, 9, 0.45), rgba(5, 3, 9, 0.75)),
+    url("assets/backgrounds/main_bg.png"),
+    radial-gradient(circle at top, #150f26 0%, #050309 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: #fff;
   min-height: 100vh;
   display: flex;
@@ -110,8 +119,9 @@ button:hover {
 }
 
 #gameContainer {
-  width: min(760px, 100%);
-  max-width: 760px;
+  /* Board wrapper size: matches the rendered board frame with no internal offset. */
+  width: min(600px, 100%);
+  max-width: 600px;
   aspect-ratio: 1 / 1;
   border-radius: 20px;
   overflow: hidden;
@@ -121,58 +131,178 @@ button:hover {
 
 .game-area {
   display: flex;
-  gap: 18px;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
   justify-content: center;
-  width: min(1000px, 100%);
+  gap: 24px;
+  width: min(1120px, 100%);
   max-width: 100%;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .energy-panel {
-  display: grid;
-  gap: 14px;
-  width: min(220px, 100%);
-  background: rgba(20, 18, 38, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(420px, 100%);
+  flex: 0 0 420px;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
-.energy-meter {
+#gameContainer {
+  flex: 0 0 auto;
+}
+
+.dragon-energy-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 120px;
+}
+
+.dragon-portrait-slot {
+  width: 100px;
+  height: 100px;
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.dragon-portrait-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  display: block;
+}
+
+.dragon-fallback {
+  display: grid;
+  place-items: center;
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 2rem;
+}
+
+.dragon-fallback[hidden] {
+  display: none;
+}
+
+.energy-card {
+  display: grid;
+  gap: 12px;
+  width: 276px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: rgba(18, 14, 36, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.energy-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .energy-title {
-  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 1rem;
   font-weight: 700;
   color: #ffd98f;
 }
 
+.element-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  line-height: 1;
+}
+
+.skill-name {
+  margin-top: 3px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.info-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: Georgia, serif;
+}
+
+.energy-bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .energy-progress {
-  font-size: 0.95rem;
+  min-width: 44px;
+  font-size: 0.9rem;
+  font-weight: 700;
   color: #fff;
+  text-align: right;
 }
 
 .energy-bar {
   width: 100%;
-  height: 14px;
-  background: rgba(255, 255, 255, 0.1);
+  max-width: 260px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .energy-fill {
   width: 0%;
   height: 100%;
-  background: linear-gradient(90deg, #ff854e 0%, #ff3dad 100%);
   border-radius: 999px;
   transition: width 220ms ease;
+}
+
+.fire-energy-fill {
+  background: linear-gradient(90deg, #ff4d4d 0%, #ff8c1a 100%);
+  box-shadow: 0 0 12px rgba(255, 140, 26, 0.45);
+}
+
+.ice-energy-fill {
+  background: linear-gradient(90deg, #4db8ff 0%, #dff6ff 100%);
+  box-shadow: 0 0 12px rgba(77, 184, 255, 0.45);
+}
+
+.leaf-energy-fill {
+  background: linear-gradient(90deg, #2ecc71 0%, #8cff66 100%);
+  box-shadow: 0 0 12px rgba(140, 255, 102, 0.4);
+}
+
+.earth-energy-fill {
+  background: linear-gradient(90deg, #b8860b 0%, #e0c068 100%);
+  box-shadow: 0 0 12px rgba(224, 192, 104, 0.42);
+}
+
+.dragon-energy-ready .energy-card {
+  animation: dragonEnergyReadyPulse 650ms ease;
 }
 
 .overlay {
@@ -213,6 +343,16 @@ button:hover {
   margin-bottom: 18px;
 }
 
+@media (max-width: 900px) {
+  .game-area {
+    flex-wrap: wrap;
+  }
+
+  .energy-panel {
+    flex: 1 1 420px;
+  }
+}
+
 @media (max-width: 640px) {
   .ui-panel {
     padding: 16px;
@@ -225,6 +365,20 @@ button:hover {
   button {
     max-width: 100%;
   }
+
+  .energy-meter {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .dragon-portrait-slot {
+    width: 88px;
+    height: 88px;
+  }
+
+  .energy-card {
+    width: min(276px, 100%);
+  }
 }
 
 .blessing-countdown {
@@ -236,10 +390,13 @@ button:hover {
 }
 
 .energy-meter.nature-blessing-active {
+  animation: natureBlessingPulse 2s ease-in-out infinite;
+}
+
+.energy-meter.nature-blessing-active .energy-card {
   background: rgba(74, 254, 90, 0.15);
   border: 1px solid rgba(74, 254, 90, 0.4);
   box-shadow: 0 0 16px rgba(74, 254, 90, 0.3), inset 0 0 16px rgba(74, 254, 90, 0.1);
-  animation: natureBlessingPulse 2s ease-in-out infinite;
 }
 
 .energy-meter.nature-blessing-active .energy-fill {
@@ -269,10 +426,28 @@ button:hover {
 }
 
 .energy-meter.frozen-time-active {
+  animation: frozenTimePulse 2s ease-in-out infinite;
+}
+
+@keyframes dragonEnergyReadyPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), 0 0 0 rgba(255, 230, 160, 0);
+  }
+  45% {
+    transform: scale(1.025);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), 0 0 26px rgba(255, 230, 160, 0.75);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), 0 0 0 rgba(255, 230, 160, 0);
+  }
+}
+
+.energy-meter.frozen-time-active .energy-card {
   background: rgba(77, 184, 255, 0.15);
   border: 1px solid rgba(77, 184, 255, 0.4);
   box-shadow: 0 0 16px rgba(77, 184, 255, 0.3), inset 0 0 16px rgba(77, 184, 255, 0.1);
-  animation: frozenTimePulse 2s ease-in-out infinite;
 }
 
 .energy-meter.frozen-time-active .energy-fill {

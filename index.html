@@ -28,34 +28,91 @@
 
   <div class="game-area">
     <div class="energy-panel">
-      <div class="energy-meter">
-        <div class="energy-title">Fire Dragon</div>
-        <div class="energy-progress" id="fireEnergyProgress">0/30</div>
-        <div class="energy-bar">
-          <div class="energy-fill" id="fireEnergyFill"></div>
+      <div class="energy-meter dragon-energy-row">
+        <!-- Dragon portrait assets live in assets/dragons/. Replace placeholder images by dropping PNG files with the expected names. -->
+        <div class="dragon-portrait-slot fire-portrait">
+          <img src="assets/dragons/fire_dragon.png" alt="Fire Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <span class="dragon-fallback" hidden>🔥</span>
+        </div>
+        <div class="energy-card fire-energy-card">
+          <div class="energy-card-header">
+            <div>
+              <div class="energy-title"><span class="element-icon">🔥</span> Fire Dragon</div>
+              <div class="skill-name">Fire Storm</div>
+            </div>
+            <span class="info-icon">i</span>
+          </div>
+          <div class="energy-bar-row">
+            <div class="energy-bar">
+              <div class="energy-fill fire-energy-fill" id="fireEnergyFill"></div>
+            </div>
+            <div class="energy-progress" id="fireEnergyProgress">0/30</div>
+          </div>
         </div>
       </div>
-      <div class="energy-meter">
-        <div class="energy-title">Ice Dragon</div>
-        <div class="energy-progress" id="iceEnergyProgress">0/30</div>
-        <div class="energy-bar">
-          <div class="energy-fill" id="iceEnergyFill"></div>
+      <div class="energy-meter dragon-energy-row">
+        <div class="dragon-portrait-slot ice-portrait">
+          <img src="assets/dragons/ice_dragon.png" alt="Ice Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <span class="dragon-fallback" hidden>❄️</span>
         </div>
-        <div class="frozen-time-countdown" style="display: none;"></div>
-      </div>
-      <div class="energy-meter">
-        <div class="energy-title">Leaf Dragon</div>
-        <div class="energy-progress" id="leafEnergyProgress">0/30</div>
-        <div class="energy-bar">
-          <div class="energy-fill" id="leafEnergyFill"></div>
+        <div class="energy-card ice-energy-card">
+          <div class="energy-card-header">
+            <div>
+              <div class="energy-title"><span class="element-icon">❄️</span> Ice Dragon</div>
+              <div class="skill-name">Frozen Time</div>
+            </div>
+            <span class="info-icon">i</span>
+          </div>
+          <div class="energy-bar-row">
+            <div class="energy-bar">
+              <div class="energy-fill ice-energy-fill" id="iceEnergyFill"></div>
+            </div>
+            <div class="energy-progress" id="iceEnergyProgress">0/30</div>
+          </div>
+          <div class="frozen-time-countdown" style="display: none;"></div>
         </div>
-        <div class="blessing-countdown" style="display: none;"></div>
       </div>
-      <div class="energy-meter">
-        <div class="energy-title">Earth Dragon</div>
-        <div class="energy-progress" id="earthEnergyProgress">0/30</div>
-        <div class="energy-bar">
-          <div class="energy-fill" id="earthEnergyFill"></div>
+      <div class="energy-meter dragon-energy-row">
+        <div class="dragon-portrait-slot leaf-portrait">
+          <img src="assets/dragons/leaf_dragon.png" alt="Leaf Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <span class="dragon-fallback" hidden>🌿</span>
+        </div>
+        <div class="energy-card leaf-energy-card">
+          <div class="energy-card-header">
+            <div>
+              <div class="energy-title"><span class="element-icon">🌿</span> Leaf Dragon</div>
+              <div class="skill-name">Nature Blessing</div>
+            </div>
+            <span class="info-icon">i</span>
+          </div>
+          <div class="energy-bar-row">
+            <div class="energy-bar">
+              <div class="energy-fill leaf-energy-fill" id="leafEnergyFill"></div>
+            </div>
+            <div class="energy-progress" id="leafEnergyProgress">0/30</div>
+          </div>
+          <div class="blessing-countdown" style="display: none;"></div>
+        </div>
+      </div>
+      <div class="energy-meter dragon-energy-row">
+        <div class="dragon-portrait-slot earth-portrait">
+          <img src="assets/dragons/earth_dragon.png" alt="Earth Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <span class="dragon-fallback" hidden>🪨</span>
+        </div>
+        <div class="energy-card earth-energy-card">
+          <div class="energy-card-header">
+            <div>
+              <div class="energy-title"><span class="element-icon">🪨</span> Earth Dragon</div>
+              <div class="skill-name">Petrify</div>
+            </div>
+            <span class="info-icon">i</span>
+          </div>
+          <div class="energy-bar-row">
+            <div class="energy-bar">
+              <div class="energy-fill earth-energy-fill" id="earthEnergyFill"></div>
+            </div>
+            <div class="energy-progress" id="earthEnergyProgress">0/30</div>
+          </div>
         </div>
       </div>
     </div>
