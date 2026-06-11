@@ -81,6 +81,7 @@ let dragonEnergyFill = [];
 let pendingDragonSkills = [];
 let pendingFireStorm = null;
 let pendingEarthPetrify = false;
+let delayedSpecialQueue = [];
 let earthPetrifyTimeout = null;
 let scoreMultiplier = 1;
 let natureBlessingEvent = null;
@@ -726,6 +727,11 @@ function sortCellsForLine(cells) {
   });
 }
 
+function selectMatch4FallbackCell(matchedCells) {
+  const sortedCells = sortCellsForLine(matchedCells);
+  return sortedCells[2] || sortedCells[Math.floor(sortedCells.length / 2)] || sortedCells[0];
+}
+
 function selectMatch4CenterCell(matchedCells) {
   const sortedCells = sortCellsForLine(matchedCells);
   console.log('lastSwappedCells', lastSwappedCells);
@@ -740,9 +746,168 @@ function selectMatch4CenterCell(matchedCells) {
     return { row: swappedCell.row, col: swappedCell.col };
   }
 
-  const fallbackCell = sortedCells[2] || sortedCells[Math.floor(sortedCells.length / 2)];
+  const fallbackCell = selectMatch4FallbackCell(matchedCells);
   console.log('Match 4 fallback center used', fallbackCell.row, fallbackCell.col);
   return { row: fallbackCell.row, col: fallbackCell.col };
+}
+
+function isDelayedSpecialEffect(effect) {
+  return effect.type === 'match4' || effect.type === 'match5' || effect.type === 'lshape' || effect.type === 'tshape';
+}
+
+function cellsContain(cells, target) {
+  return cells.some((cell) => cell.row === target.row && cell.col === target.col);
+}
+
+function selectSpecialTriggerCell(effect, useSwappedTrigger) {
+  if (useSwappedTrigger) {
+    const swappedCell = lastSwappedCells.find((swapped) => cellsContain(effect.matchedCells, swapped));
+    if (swappedCell) {
+      console.log('Trigger egg selected', swappedCell.row, swappedCell.col);
+      return { row: swappedCell.row, col: swappedCell.col };
+    }
+  }
+
+  const fallbackCell = effect.type === 'match4'
+    ? selectMatch4FallbackCell(effect.matchedCells)
+    : effect.centerCell || effect.matchedCells[Math.floor(effect.matchedCells.length / 2)] || effect.matchedCells[0];
+  console.log('Trigger egg selected', fallbackCell.row, fallbackCell.col);
+  return { row: fallbackCell.row, col: fallbackCell.col };
+}
+
+function startTriggerEggBlink(triggerCell) {
+  const sprite = tileSprites[triggerCell.row] && tileSprites[triggerCell.row][triggerCell.col];
+  if (!sprite) {
+    return null;
+  }
+
+  console.log('Trigger egg blinking');
+  sprite.setTint(0xfff2a8);
+  return gameInstance.tweens.add({
+    targets: sprite,
+    alpha: 0.38,
+    duration: 260,
+    yoyo: true,
+    repeat: -1,
+    ease: 'Sine.easeInOut',
+  });
+}
+
+function stopTriggerEggBlink(delayedSpecial) {
+  const sprite = delayedSpecial.triggerSprite;
+  if (delayedSpecial.blinkTween) {
+    try { delayedSpecial.blinkTween.stop(); } catch (e) {}
+  }
+  if (sprite && sprite.active) {
+    sprite.setAlpha(1);
+    sprite.clearTint();
+  }
+}
+
+function getDelayedSpecialTriggerCell(delayedSpecial) {
+  const sprite = delayedSpecial.triggerSprite;
+  if (sprite && sprite.active) {
+    return {
+      row: sprite.getData('row'),
+      col: sprite.getData('col'),
+    };
+  }
+
+  return delayedSpecial.triggerCell;
+}
+
+function queueDelayedSpecial(effect, triggerCell) {
+  console.log('Special match delayed');
+  const triggerSprite = tileSprites[triggerCell.row] && tileSprites[triggerCell.row][triggerCell.col];
+  delayedSpecialQueue.push({
+    type: effect.type,
+    direction: effect.direction,
+    eggType: effect.eggType,
+    triggerCell,
+    triggerSprite,
+    blinkTween: startTriggerEggBlink(triggerCell),
+  });
+}
+
+function getDelayedSpecialTargets(delayedSpecial, triggerCell) {
+  if (delayedSpecial.type === 'match5') {
+    return getAllSameType(delayedSpecial.eggType);
+  }
+
+  if (delayedSpecial.type === 'match4') {
+    const effect = {
+      type: 'match4',
+      direction: delayedSpecial.direction,
+      centerCell: triggerCell,
+      matchedCells: [triggerCell],
+    };
+    showMatch4Beam(effect);
+    return getMatch4Targets(effect);
+  }
+
+  return getExplosionArea(triggerCell.row, triggerCell.col);
+}
+
+function processDelayedSpecialQueue(onComplete) {
+  if (isGameOver) {
+    console.log('Resolve stopped because game over');
+    return;
+  }
+
+  if (!delayedSpecialQueue.length) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const delayedSpecial = delayedSpecialQueue.shift();
+  const triggerCell = getDelayedSpecialTriggerCell(delayedSpecial);
+  console.log('Activating delayed special');
+  stopTriggerEggBlink(delayedSpecial);
+
+  const destroyedCells = new Set();
+  getDelayedSpecialTargets(delayedSpecial, triggerCell).forEach((tile) => {
+    if (
+      tile.row >= 0 &&
+      tile.row < GRID_SIZE &&
+      tile.col >= 0 &&
+      tile.col < GRID_SIZE &&
+      board[tile.row][tile.col] !== null &&
+      board[tile.row][tile.col] !== undefined
+    ) {
+      destroyedCells.add(`${tile.row}-${tile.col}`);
+    }
+  });
+
+  let totalScoreGain = destroyedCells.size * MATCH_SCORE;
+  if (delayedSpecial.type === 'match5') {
+    totalScoreGain *= 2;
+  }
+
+  destroyedCells.forEach((key) => {
+    const [row, col] = key.split('-').map(Number);
+    const type = board[row][col];
+    if (type !== null && type !== undefined) {
+      gainDragonEnergy(type);
+    }
+  });
+
+  addScore(totalScoreGain);
+  const popupPosition = getEggPosition(triggerCell.row, triggerCell.col);
+  if (totalScoreGain > 0) {
+    createScorePopup(popupPosition.x, popupPosition.y, `+${totalScoreGain}`, 32);
+  }
+
+  animateRemovals(destroyedCells, () => {
+    console.log('Delayed special complete');
+    processDelayedSpecialQueue(onComplete);
+  });
+}
+
+function clearDelayedSpecialQueue() {
+  delayedSpecialQueue.forEach((delayedSpecial) => {
+    stopTriggerEggBlink(delayedSpecial);
+  });
+  delayedSpecialQueue = [];
 }
 
 function resolveBoard(isAutomatic = false) {
@@ -772,6 +937,18 @@ function resolveBoard(isAutomatic = false) {
     const effects = detectPatterns();
     console.log('effects detected in chain', effects.length);
     if (!effects.length) {
+      if (delayedSpecialQueue.length) {
+        processDelayedSpecialQueue(() => {
+          if (isGameOver) {
+            isResolving = false;
+            console.log('Resolve stopped because game over');
+            return;
+          }
+          runStep();
+        });
+        return;
+      }
+
       if (pendingFireStorm) {
         const destroyedCells = new Set();
         const totalScoreGain = applyPendingFireStorm(destroyedCells);
@@ -816,6 +993,8 @@ function resolveBoard(isAutomatic = false) {
       return;
     }
 
+    const useSwappedTrigger = firstStep && !isAutomatic;
+
     if (!firstStep) {
       comboCount += 1;
       pulseCombo();
@@ -827,32 +1006,32 @@ function resolveBoard(isAutomatic = false) {
     console.log('sorted effects by priority', effects.map((effect) => ({ type: effect.type, priority: effect.priority, eggType: effect.eggType })));
 
     const destroyedCells = new Set();
+    const reservedDelayedTriggerKeys = new Set();
+    const delayedTriggerCells = new Map();
     let totalScoreGain = 0;
+
+    effects.forEach((effect) => {
+      if (!isDelayedSpecialEffect(effect)) {
+        return;
+      }
+
+      const triggerCell = selectSpecialTriggerCell(effect, useSwappedTrigger);
+      delayedTriggerCells.set(effect, triggerCell);
+      reservedDelayedTriggerKeys.add(`${triggerCell.row}-${triggerCell.col}`);
+    });
 
     effects.forEach((effect) => {
       console.log('applying special effect in chain', effect.type, effect.direction || '', effect.centerCell ? `${effect.centerCell.row}-${effect.centerCell.col}` : '');
       let effectTargets = [];
+      let triggerKey = null;
 
-      switch (effect.type) {
-        case 'match5':
-          effectTargets = getAllSameType(effect.eggType);
-          break;
-        case 'match4':
-          effectTargets = getMatch4Targets(effect);
-          showMatch4Beam(effect);
-          break;
-        case 'lshape':
-        case 'tshape':
-          if (effect.centerCell) {
-            effectTargets = getExplosionArea(effect.centerCell.row, effect.centerCell.col);
-          } else {
-            effectTargets = effect.matchedCells;
-          }
-          break;
-        case 'match3':
-        default:
-          effectTargets = effect.matchedCells;
-          break;
+      if (isDelayedSpecialEffect(effect)) {
+        const triggerCell = delayedTriggerCells.get(effect);
+        triggerKey = `${triggerCell.row}-${triggerCell.col}`;
+        queueDelayedSpecial(effect, triggerCell);
+        effectTargets = effect.matchedCells.filter((cell) => `${cell.row}-${cell.col}` !== triggerKey);
+      } else {
+        effectTargets = effect.matchedCells;
       }
 
       let newDestroyed = 0;
@@ -864,6 +1043,9 @@ function resolveBoard(isAutomatic = false) {
 
       effectTargets.forEach((tile) => {
         const key = `${tile.row}-${tile.col}`;
+        if (reservedDelayedTriggerKeys.has(key)) {
+          return;
+        }
         if (destroyedCells.has(key)) {
           console.log('skipped duplicate cell', key);
           return;
@@ -873,9 +1055,6 @@ function resolveBoard(isAutomatic = false) {
       });
 
       let effectScore = newDestroyed * MATCH_SCORE;
-      if (effect.type === 'match5') {
-        effectScore *= 2;
-      }
 
       totalScoreGain += effectScore;
       console.log('score gained from effect', effect.type, effectScore);
@@ -908,7 +1087,14 @@ function resolveBoard(isAutomatic = false) {
         console.log('Resolve stopped because game over');
         return;
       }
-      runStep();
+      processDelayedSpecialQueue(() => {
+        if (isGameOver) {
+          isResolving = false;
+          console.log('Resolve stopped because game over');
+          return;
+        }
+        runStep();
+      });
     });
   };
 
@@ -2053,6 +2239,7 @@ function endGame() {
   pendingDragonSkills = [];
   pendingFireStorm = null;
   pendingEarthPetrify = false;
+  clearDelayedSpecialQueue();
   if (earthPetrifyTimeout) {
     clearTimeout(earthPetrifyTimeout);
     earthPetrifyTimeout = null;
@@ -2096,6 +2283,7 @@ function resetGame() {
   pendingDragonSkills = [];
   pendingFireStorm = null;
   pendingEarthPetrify = false;
+  clearDelayedSpecialQueue();
   if (earthPetrifyTimeout) {
     clearTimeout(earthPetrifyTimeout);
     earthPetrifyTimeout = null;
