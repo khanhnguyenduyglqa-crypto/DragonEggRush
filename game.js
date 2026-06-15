@@ -4014,9 +4014,6 @@ function addScore(baseScore) {
   score += finalScore;
   console.log('total score', score);
   updateUi();
-  if (scoreMultiplier > 1 && leafDoubleScoreActiveForCurrentMove) {
-    playLeafScorePulse();
-  }
 }
 
 function createTimerPopup(text) {
