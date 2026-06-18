@@ -47,10 +47,10 @@ const EGG_VISUALS = [
 const DRAGON_TYPES = ['Fire', 'Ice', 'Leaf', 'Earth'];
 const DRAGON_SKILL_TYPES = ['fire', 'ice', 'leaf', 'earth'];
 const DRAGON_SKILL_PRIORITY = {
-  ice: 1,
-  leaf: 2,
-  fire: 3,
-  earth: 4,
+  fire: 1,
+  earth: 2,
+  leaf: 3,
+  ice: 4,
 };
 const DRAGON_CUT_IN_CONFIGS = {
   fire: {
@@ -109,6 +109,7 @@ const SELECTED_SCALE = 1.15;
 const MATCH_SCORE = 10;
 const TIMER_SECONDS = 90;
 const EGG_DESTROY_DURATION = 260;
+const SWIPE_SWAP_THRESHOLD = 32;
 const EARTH_CONVERSION_STAGGER = 55;
 const EARTH_CONVERSION_HOLD = 520;
 const EGG_DESTROY_THEMES = [
@@ -156,10 +157,26 @@ const DEFAULT_BOARD_SKIN = {
   key: 'board-default',
   path: 'assets/boards/default_board.png',
 };
+const HEADER_BACKGROUND_ASSET = {
+  key: 'header-bg',
+  path: 'assets/ui/header-bg.png',
+};
+const STAT_CARD_ASSETS = [
+  {
+    key: 'stat-card-gold',
+    path: 'assets/ui/stat-card-gold.png',
+  },
+  {
+    key: 'stat-card-blue',
+    path: 'assets/ui/stat-card-blue.png',
+  },
+];
+const STAT_CARD_ASSET_BY_KEY = Object.fromEntries(STAT_CARD_ASSETS.map((asset) => [asset.key, asset]));
 let board = [];
 let tileSprites = [];
 let selectedEgg = null;
 let lastSwappedCells = [];
+let activeDragInput = null;
 let isAnimating = false;
 let isGameOver = false;
 let isResolving = false;
@@ -206,14 +223,23 @@ let comboText;
 let gameOverOverlay;
 let finalScoreText;
 let restartButton;
+let optionsButton;
+let optionsOverlay;
+let optionsPanel;
 let overlayRestartButton;
 let gameInstance;
 let boardSkinSprite;
 let activeDragonCutIn = null;
 let dragonCutInToken = 0;
+let isOptionsPanelOpen = false;
+let gameRunId = 0;
 
 function preload() {
   this.load.image(DEFAULT_BOARD_SKIN.key, DEFAULT_BOARD_SKIN.path);
+  this.load.image(HEADER_BACKGROUND_ASSET.key, HEADER_BACKGROUND_ASSET.path);
+  STAT_CARD_ASSETS.forEach((asset) => {
+    this.load.image(asset.key, asset.path);
+  });
   EGG_VISUALS.forEach((egg) => {
     this.load.image(egg.key, egg.path);
   });
@@ -229,9 +255,13 @@ function create() {
   scoreText = document.getElementById('scoreValue');
   timerText = document.getElementById('timerValue');
   comboText = document.getElementById('comboText');
+  setupStatCardBackgrounds();
   gameOverOverlay = document.getElementById('gameOverOverlay');
   finalScoreText = document.getElementById('finalScore');
   restartButton = document.getElementById('restartButton');
+  optionsButton = document.getElementById('optionsButton');
+  optionsOverlay = document.getElementById('optionsOverlay');
+  optionsPanel = document.getElementById('optionsPanel');
   overlayRestartButton = document.getElementById('overlayRestart');
 
   dragonEnergyText = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}EnergyProgress`));
@@ -239,13 +269,64 @@ function create() {
   dragonReadyBadge = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}ReadyBadge`));
 
   restartButton.addEventListener('click', resetGame);
+  setupOptionsPanel();
   overlayRestartButton.addEventListener('click', resetGame);
+  this.input.on('pointermove', handleBoardPointerMove);
+  this.input.on('pointerup', handleBoardPointerUp);
+  this.input.on('pointerupoutside', handleBoardPointerUp);
 
   initializeBoard();
   createBoardSkinLayer();
   createBoardSprites();
   updateUi();
   console.log('Game waiting for first move');
+}
+
+function setupOptionsPanel() {
+  if (!optionsButton || !optionsOverlay || !optionsPanel) {
+    return;
+  }
+
+  optionsButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shouldOpen = optionsOverlay.classList.contains('hidden');
+    setOptionsPanelOpen(shouldOpen);
+  });
+
+  optionsOverlay.addEventListener('click', () => {
+    setOptionsPanelOpen(false);
+  });
+
+  optionsPanel.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  if (restartButton) {
+    restartButton.addEventListener('click', () => {
+      setOptionsPanelOpen(false);
+    });
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setOptionsPanelOpen(false);
+    }
+  });
+}
+
+function setOptionsPanelOpen(isOpen) {
+  if (!optionsButton || !optionsOverlay) {
+    return;
+  }
+
+  isOptionsPanelOpen = isOpen;
+  activeDragInput = null;
+  optionsOverlay.classList.toggle('hidden', !isOpen);
+  optionsButton.setAttribute('aria-expanded', String(isOpen));
+}
+
+function isCurrentRun(runId) {
+  return runId === gameRunId;
 }
 
 function generateEggTextures() {
@@ -274,6 +355,44 @@ function generateEggTextures() {
 
 function update() {
   // No per-frame updates needed for this game.
+}
+
+function createStatCardBackground(cardElement, textureKey) {
+  if (!cardElement) {
+    return null;
+  }
+
+  const asset = STAT_CARD_ASSET_BY_KEY[textureKey];
+  if (!asset) {
+    return null;
+  }
+
+  const existingImage = cardElement.querySelector('.stat-card-bg');
+  if (existingImage) {
+    existingImage.src = asset.path;
+    existingImage.alt = '';
+    existingImage.dataset.textureKey = textureKey;
+    return existingImage;
+  }
+
+  const backgroundImage = document.createElement('img');
+  backgroundImage.className = 'stat-card-bg';
+  backgroundImage.src = asset.path;
+  backgroundImage.alt = '';
+  backgroundImage.dataset.textureKey = textureKey;
+  backgroundImage.draggable = false;
+  backgroundImage.decoding = 'async';
+  backgroundImage.onerror = () => {
+    backgroundImage.hidden = true;
+  };
+  cardElement.prepend(backgroundImage);
+  return backgroundImage;
+}
+
+function setupStatCardBackgrounds() {
+  document.querySelectorAll('.stat[data-stat-card]').forEach((cardElement) => {
+    createStatCardBackground(cardElement, cardElement.dataset.statCard);
+  });
 }
 
 function initializeBoard() {
@@ -402,9 +521,27 @@ function getEggTextureKey(type) {
   return egg ? egg.key : EGG_VISUALS[0].key;
 }
 
+function canAcceptBoardInput() {
+  return !isOptionsPanelOpen && !isGameOver && !isAnimating && timer > 0;
+}
+
+function attachEggInputHandlers(sprite) {
+  if (!sprite) return;
+
+  sprite.setInteractive();
+  try { sprite.off && sprite.off('pointerdown'); } catch (e) {}
+  sprite.on && sprite.on('pointerdown', function (pointer) {
+    const r = this.getData('row');
+    const c = this.getData('col');
+    const t = this.getData('type');
+    console.log('egg pointer down', r, c, t);
+    handleEggPointerDown(r, c, pointer);
+  });
+}
+
 function createTileSprite(row, col, x, y, type) {
   const texture = getEggTextureKey(type);
-  const sprite = gameInstance.add.sprite(x, y, texture).setInteractive();
+  const sprite = gameInstance.add.sprite(x, y, texture);
   sprite.setDepth(10);
   setEggDisplaySize(sprite);
   sprite.setAlpha(1);
@@ -412,16 +549,86 @@ function createTileSprite(row, col, x, y, type) {
   sprite.setData('row', row);
   sprite.setData('col', col);
   sprite.setData('type', type);
-  sprite.on('pointerdown', function () {
-    const r = this.getData('row');
-    const c = this.getData('col');
-    const t = this.getData('type');
-    console.log('egg clicked', r, c, t);
-    handleTileClick(r, c);
-  });
+  attachEggInputHandlers(sprite);
   console.log('created egg', row, col, type);
   console.log('interactive attached', row, col);
   return sprite;
+}
+
+function handleEggPointerDown(row, col, pointer) {
+  if (!canAcceptBoardInput()) {
+    return;
+  }
+
+  activeDragInput = {
+    row,
+    col,
+    startX: pointer.x,
+    startY: pointer.y,
+    pointerId: pointer.id,
+    dragSwapTriggered: false,
+  };
+}
+
+function getSwipeTarget(start, dx, dy) {
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_SWAP_THRESHOLD) {
+    return null;
+  }
+
+  let row = start.row;
+  let col = start.col;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    col += dx > 0 ? 1 : -1;
+  } else {
+    row += dy > 0 ? 1 : -1;
+  }
+
+  if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) {
+    return { outOfBounds: true };
+  }
+
+  return { row, col };
+}
+
+function handleBoardPointerMove(pointer) {
+  if (!activeDragInput || activeDragInput.dragSwapTriggered) {
+    return;
+  }
+
+  if (pointer.id !== activeDragInput.pointerId || !canAcceptBoardInput()) {
+    return;
+  }
+
+  const dx = pointer.x - activeDragInput.startX;
+  const dy = pointer.y - activeDragInput.startY;
+  const target = getSwipeTarget(activeDragInput, dx, dy);
+  if (!target) {
+    return;
+  }
+
+  activeDragInput.dragSwapTriggered = true;
+  if (target.outOfBounds) {
+    return;
+  }
+
+  console.log('drag swap triggered', activeDragInput.row, activeDragInput.col, '->', target.row, target.col);
+  deselectEgg();
+  swapEggs({ row: activeDragInput.row, col: activeDragInput.col }, target);
+}
+
+function handleBoardPointerUp(pointer) {
+  if (!activeDragInput || pointer.id !== activeDragInput.pointerId) {
+    return;
+  }
+
+  const dragInput = activeDragInput;
+  activeDragInput = null;
+  if (dragInput.dragSwapTriggered) {
+    return;
+  }
+
+  console.log('egg clicked', dragInput.row, dragInput.col);
+  handleTileClick(dragInput.row, dragInput.col);
 }
 
 function handleTileClick(row, col) {
@@ -516,6 +723,7 @@ function getBoardSprites() {
 }
 
 function disableBoardInput() {
+  activeDragInput = null;
   getBoardSprites().forEach((sprite) => {
     try { sprite.disableInteractive(); } catch (e) {}
   });
@@ -532,6 +740,40 @@ function stopBoardTweens() {
   gameInstance.tweens.killTweensOf(getBoardSprites());
 }
 
+function stopGameplayTweensAndTimers() {
+  if (!gameInstance) return;
+
+  try {
+    if (gameInstance.tweens) {
+      gameInstance.tweens.killAll();
+    }
+  } catch (e) {}
+
+  try {
+    if (gameInstance.time && gameInstance.time.removeAllEvents) {
+      gameInstance.time.removeAllEvents();
+    }
+  } catch (e) {}
+
+  countdownEvent = null;
+}
+
+function clearPhaserGameplayObjects() {
+  if (!gameInstance || !gameInstance.children) {
+    clearBoardSprites();
+    return;
+  }
+
+  try {
+    gameInstance.children.removeAll(true);
+  } catch (e) {
+    clearBoardSprites();
+  }
+
+  boardSkinSprite = null;
+  tileSprites = [];
+}
+
 function isAdjacent(a, b) {
   return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
 }
@@ -545,6 +787,7 @@ function swapEggs(first, second) {
   if (!first || !second) {
     return;
   }
+  const runId = gameRunId;
   isAnimating = true;
   console.log('input disabled');
   // Ensure sprites exist at these positions (they may be null after animations)
@@ -569,7 +812,7 @@ function swapEggs(first, second) {
     duration: 180,
     ease: 'Power2',
     onComplete: () => {
-      if (isGameOver) {
+      if (isGameOver || !isCurrentRun(runId)) {
         console.log('Resolve stopped because game over');
         return;
       }
@@ -598,7 +841,7 @@ function swapEggs(first, second) {
           duration: 180,
           ease: 'Power2',
           onComplete: () => {
-            if (isGameOver) {
+            if (isGameOver || !isCurrentRun(runId)) {
               console.log('Resolve stopped because game over');
               return;
             }
@@ -775,7 +1018,7 @@ function ensureSpriteAt(row, col) {
   setEggDisplaySize(sprite);
   sprite.setAlpha(1);
   sprite.clearTint();
-  sprite.setInteractive();
+  attachEggInputHandlers(sprite);
   return sprite;
 }
 
@@ -966,8 +1209,8 @@ function getDelayedSpecialTargets(delayedSpecial, triggerCell) {
   return getExplosionArea(triggerCell.row, triggerCell.col);
 }
 
-function processDelayedSpecialQueue(onComplete) {
-  if (isGameOver) {
+function processDelayedSpecialQueue(onComplete, runId = gameRunId) {
+  if (isGameOver || !isCurrentRun(runId)) {
     console.log('Resolve stopped because game over');
     return;
   }
@@ -1003,17 +1246,23 @@ function processDelayedSpecialQueue(onComplete) {
 
   grantDragonEnergyForDestroyedCells(destroyedCells, 'match');
 
-  addScore(totalScoreGain);
+  addScore(totalScoreGain, runId);
   const popupPosition = getEggPosition(triggerCell.row, triggerCell.col);
   if (totalScoreGain > 0) {
     createScorePopup(popupPosition.x, popupPosition.y, `+${totalScoreGain}`, 32);
   }
 
   playDelayedSpecialActivationEffect(delayedSpecial, triggerCell, destroyedCells, () => {
+    if (!isCurrentRun(runId)) {
+      return;
+    }
     animateRemovals(destroyedCells, () => {
+      if (!isCurrentRun(runId)) {
+        return;
+      }
       console.log('Delayed special complete');
-      processDelayedSpecialQueue(onComplete);
-    }, { source: 'match' });
+      processDelayedSpecialQueue(onComplete, runId);
+    }, { source: 'match', runId });
   });
 }
 
@@ -1025,7 +1274,8 @@ function clearDelayedSpecialQueue() {
 }
 
 function resolveBoard(isAutomatic = false) {
-  if (isGameOver) {
+  const runId = gameRunId;
+  if (isGameOver || !isCurrentRun(runId)) {
     console.log('Resolve stopped because game over');
     return;
   }
@@ -1039,7 +1289,7 @@ function resolveBoard(isAutomatic = false) {
   let firstStep = !isAutomatic;
 
   const runStep = () => {
-    if (isGameOver) {
+    if (isGameOver || !isCurrentRun(runId)) {
       isResolving = false;
       console.log('Resolve stopped because game over');
       return;
@@ -1053,13 +1303,13 @@ function resolveBoard(isAutomatic = false) {
     if (!effects.length) {
       if (delayedSpecialQueue.length) {
         processDelayedSpecialQueue(() => {
-          if (isGameOver) {
+          if (isGameOver || !isCurrentRun(runId)) {
             isResolving = false;
             console.log('Resolve stopped because game over');
             return;
           }
           runStep();
-        });
+        }, runId);
         return;
       }
 
@@ -1068,21 +1318,21 @@ function resolveBoard(isAutomatic = false) {
         const totalScoreGain = applyPendingFireStorm(destroyedCells);
         grantDragonEnergyForDestroyedCells(destroyedCells, 'dragonSkill');
 
-        addScore(totalScoreGain);
-        if (isGameOver) {
+        addScore(totalScoreGain, runId);
+        if (isGameOver || !isCurrentRun(runId)) {
           isResolving = false;
           console.log('Resolve stopped because game over');
           return;
         }
 
         animateRemovals(destroyedCells, () => {
-          if (isGameOver) {
+          if (isGameOver || !isCurrentRun(runId)) {
             isResolving = false;
             console.log('Resolve stopped because game over');
             return;
           }
           runStep();
-        }, { source: 'dragonSkill' });
+        }, { source: 'dragonSkill', runId });
         return;
       }
 
@@ -1176,28 +1426,28 @@ function resolveBoard(isAutomatic = false) {
 
     grantDragonEnergyForDestroyedCells(destroyedCells, 'match');
 
-    addScore(totalScoreGain);
-    if (isGameOver) {
+    addScore(totalScoreGain, runId);
+    if (isGameOver || !isCurrentRun(runId)) {
       isResolving = false;
       console.log('Resolve stopped because game over');
       return;
     }
 
     animateRemovals(destroyedCells, () => {
-      if (isGameOver) {
+      if (isGameOver || !isCurrentRun(runId)) {
         isResolving = false;
         console.log('Resolve stopped because game over');
         return;
       }
       processDelayedSpecialQueue(() => {
-        if (isGameOver) {
+        if (isGameOver || !isCurrentRun(runId)) {
           isResolving = false;
           console.log('Resolve stopped because game over');
           return;
         }
         runStep();
-      });
-    }, { source: 'match' });
+      }, runId);
+    }, { source: 'match', runId });
   };
 
   runStep();
@@ -1730,7 +1980,7 @@ function createDestroyParticle(x, y, theme, angle, distance, index) {
   });
 }
 
-function playEggDestroyEffect(entry, onComplete) {
+function playEggDestroyEffect(entry, onComplete, runId = gameRunId) {
   if (!gameInstance || !entry.sprite) {
     if (onComplete) onComplete();
     return;
@@ -1796,7 +2046,7 @@ function playEggDestroyEffect(entry, onComplete) {
     duration: 75,
     ease: 'Back.easeOut',
     onComplete: () => {
-      if (isGameOver) {
+      if (isGameOver || !isCurrentRun(runId)) {
         tempObjects.forEach((object) => {
           try { object.destroy(); } catch (e) {}
         });
@@ -1813,6 +2063,12 @@ function playEggDestroyEffect(entry, onComplete) {
         duration: EGG_DESTROY_DURATION - 75,
         ease: 'Cubic.easeIn',
         onComplete: () => {
+          if (!isCurrentRun(runId)) {
+            tempObjects.forEach((object) => {
+              try { object.destroy(); } catch (e) {}
+            });
+            return;
+          }
           tempObjects.forEach((object) => {
             try { object.destroy(); } catch (e) {}
           });
@@ -1837,8 +2093,9 @@ function pulseCombo() {
 
 function animateRemovals(removalSet, onComplete, options = {}) {
   const source = options.source || 'match';
+  const runId = options.runId || gameRunId;
   console.log('Destroy source:', source);
-  if (isGameOver) {
+  if (isGameOver || !isCurrentRun(runId)) {
     console.log('Resolve stopped because game over');
     return;
   }
@@ -1861,19 +2118,19 @@ function animateRemovals(removalSet, onComplete, options = {}) {
       return;
     }
     applyGravity(() => {
-      if (isGameOver) {
+      if (isGameOver || !isCurrentRun(runId)) {
         console.log('Resolve stopped because game over');
         return;
       }
       refillBoard(() => {
-        if (isGameOver) {
+        if (isGameOver || !isCurrentRun(runId)) {
           console.log('Resolve stopped because game over');
           return;
         }
         console.log('gravity and refill complete');
         if (onComplete) onComplete();
-      });
-    });
+      }, runId);
+    }, runId);
     return;
   }
 
@@ -1881,7 +2138,7 @@ function animateRemovals(removalSet, onComplete, options = {}) {
   toRemove.forEach((entry) => {
     if (entry.sprite) {
       playEggDestroyEffect(entry, () => {
-        if (isGameOver) {
+        if (isGameOver || !isCurrentRun(runId)) {
           console.log('Resolve stopped because game over');
           return;
         }
@@ -1891,28 +2148,28 @@ function animateRemovals(removalSet, onComplete, options = {}) {
         done += 1;
         if (done === toRemove.length) {
           applyRemovals(removalSet);
-          if (isGameOver) {
+          if (isGameOver || !isCurrentRun(runId)) {
             console.log('Resolve stopped because game over');
             return;
           }
           applyGravity(() => {
-            if (isGameOver) {
+            if (isGameOver || !isCurrentRun(runId)) {
               console.log('Resolve stopped because game over');
               return;
             }
             refillBoard(() => {
-              if (isGameOver) {
+              if (isGameOver || !isCurrentRun(runId)) {
                 console.log('Resolve stopped because game over');
                 return;
               }
               console.log('gravity and refill complete');
               if (onComplete) onComplete();
-            });
-          });
+            }, runId);
+          }, runId);
         }
-      });
+      }, runId);
     } else {
-      if (isGameOver) {
+      if (isGameOver || !isCurrentRun(runId)) {
         console.log('Resolve stopped because game over');
         return;
       }
@@ -1920,24 +2177,24 @@ function animateRemovals(removalSet, onComplete, options = {}) {
       done += 1;
       if (done === toRemove.length) {
         applyRemovals(removalSet);
-        if (isGameOver) {
+        if (isGameOver || !isCurrentRun(runId)) {
           console.log('Resolve stopped because game over');
           return;
         }
         applyGravity(() => {
-          if (isGameOver) {
+          if (isGameOver || !isCurrentRun(runId)) {
             console.log('Resolve stopped because game over');
             return;
           }
           refillBoard(() => {
-            if (isGameOver) {
+            if (isGameOver || !isCurrentRun(runId)) {
               console.log('Resolve stopped because game over');
               return;
             }
             console.log('gravity and refill complete');
             if (onComplete) onComplete();
-          });
-        });
+          }, runId);
+        }, runId);
       }
     }
   });
@@ -1951,8 +2208,8 @@ function applyRemovals(removalSet) {
   });
 }
 
-function applyGravity(onComplete) {
-  if (isGameOver) {
+function applyGravity(onComplete, runId = gameRunId) {
+  if (isGameOver || !isCurrentRun(runId)) {
     console.log('Resolve stopped because game over');
     return;
   }
@@ -1996,15 +2253,7 @@ function applyGravity(onComplete) {
       egg.sprite.setData('row', targetRow);
       egg.sprite.setData('col', col);
       egg.sprite.setData('type', egg.type);
-      egg.sprite.setInteractive();
-      try { egg.sprite.off && egg.sprite.off('pointerdown'); } catch (e) {}
-      egg.sprite.on && egg.sprite.on('pointerdown', function () {
-        const r = this.getData('row');
-        const c = this.getData('col');
-        const t = this.getData('type');
-        console.log('egg clicked', r, c, t);
-        handleTileClick(r, c);
-      });
+      attachEggInputHandlers(egg.sprite);
 
       if (egg.row !== targetRow || egg.col !== col) {
         console.log('moving existing egg down', egg.row, egg.col, '->', targetRow, col);
@@ -2026,7 +2275,7 @@ function applyGravity(onComplete) {
   }
 
   if (tweens.length === 0) {
-    if (!isGameOver && onComplete) onComplete();
+    if (!isGameOver && isCurrentRun(runId) && onComplete) onComplete();
     return;
   }
 
@@ -2036,7 +2285,7 @@ function applyGravity(onComplete) {
     const copy = Object.assign({}, t);
     const userOnComplete = copy.onComplete;
     copy.onComplete = () => {
-      if (isGameOver) {
+      if (isGameOver || !isCurrentRun(runId)) {
         console.log('Resolve stopped because game over');
         return;
       }
@@ -2044,7 +2293,7 @@ function applyGravity(onComplete) {
       try { if (typeof userOnComplete === 'function') userOnComplete(); } catch (e) {}
       completed += 1;
       if (completed === total) {
-        if (!isGameOver && onComplete) onComplete();
+        if (!isGameOver && isCurrentRun(runId) && onComplete) onComplete();
       }
     };
     gameInstance.tweens.add(copy);
@@ -2067,8 +2316,8 @@ function collapseBoard() {
   }
 }
 
-function refillBoard(onComplete) {
-  if (isGameOver) {
+function refillBoard(onComplete, runId = gameRunId) {
+  if (isGameOver || !isCurrentRun(runId)) {
     console.log('Resolve stopped because game over');
     return;
   }
@@ -2111,7 +2360,7 @@ function refillBoard(onComplete) {
   if (tweens.length === 0) {
     console.log('refill complete');
     resetBoardVisuals();
-    if (!isGameOver && onComplete) onComplete();
+    if (!isGameOver && isCurrentRun(runId) && onComplete) onComplete();
     return;
   }
 
@@ -2121,7 +2370,7 @@ function refillBoard(onComplete) {
     const copy = Object.assign({}, t);
     const userOnComplete = copy.onComplete;
     copy.onComplete = () => {
-      if (isGameOver) {
+      if (isGameOver || !isCurrentRun(runId)) {
         console.log('Resolve stopped because game over');
         return;
       }
@@ -2131,7 +2380,7 @@ function refillBoard(onComplete) {
       if (completed === total) {
         console.log('refill complete');
         resetBoardVisuals();
-        if (!isGameOver && onComplete) onComplete();
+        if (!isGameOver && isCurrentRun(runId) && onComplete) onComplete();
       }
     };
     gameInstance.tweens.add(copy);
@@ -2169,16 +2418,7 @@ function moveSprites(onComplete) {
         sprite.setTexture(getEggTextureKey(type));
         setEggDisplaySize(sprite);
         // ensure sprite remains interactive and has correct handler
-        sprite.setInteractive();
-        // remove any previous handler and attach a fresh one that reads current data
-        try { sprite.off && sprite.off('pointerdown'); } catch (e) {}
-        sprite.on && sprite.on('pointerdown', function () {
-          const r = this.getData('row');
-          const c = this.getData('col');
-          const t = this.getData('type');
-          console.log('egg clicked', r, c, t);
-          handleTileClick(r, c);
-        });
+        attachEggInputHandlers(sprite);
         console.log('interactive attached', row, col);
       }
 
@@ -2822,7 +3062,7 @@ function createFireMeteorShape(x, y) {
   return meteor;
 }
 
-function playFireMeteorImpactEffect(topLeft, delay = 0, expectedToken = dragonCutInToken) {
+function playFireMeteorImpactEffect(topLeft, delay = 0, expectedToken = dragonCutInToken, runId = gameRunId) {
   if (!gameInstance) return;
 
   const metrics = getBoardMetrics();
@@ -2863,7 +3103,7 @@ function playFireMeteorImpactEffect(topLeft, delay = 0, expectedToken = dragonCu
   meteor.setAlpha(0);
 
   gameInstance.time.delayedCall(delay + 285, () => {
-    if (isGameOver || expectedToken !== dragonCutInToken) {
+    if (isGameOver || !isCurrentRun(runId) || expectedToken !== dragonCutInToken) {
       try { gameInstance.tweens.killTweensOf(marker); } catch (e) {}
       try { gameInstance.tweens.killTweensOf(reticle); } catch (e) {}
       try { marker.destroy(); } catch (e) {}
@@ -2884,7 +3124,7 @@ function playFireMeteorImpactEffect(topLeft, delay = 0, expectedToken = dragonCu
         try { marker.destroy(); } catch (e) {}
         try { reticle.destroy(); } catch (e) {}
         try { meteor.destroy(); } catch (e) {}
-        if (isGameOver || expectedToken !== dragonCutInToken) {
+        if (isGameOver || !isCurrentRun(runId) || expectedToken !== dragonCutInToken) {
           return;
         }
         showFireStormEffect(topLeft);
@@ -2900,7 +3140,7 @@ function playFireMeteorImpactEffect(topLeft, delay = 0, expectedToken = dragonCu
   });
 }
 
-function playFireMeteorSequence(onComplete, expectedToken = dragonCutInToken) {
+function playFireMeteorSequence(onComplete, expectedToken = dragonCutInToken, runId = gameRunId) {
   if (!gameInstance || !pendingFireStorm || !pendingFireStorm.explosions) {
     if (onComplete) onComplete();
     return;
@@ -2908,11 +3148,11 @@ function playFireMeteorSequence(onComplete, expectedToken = dragonCutInToken) {
 
   const explosions = pendingFireStorm.explosions.slice();
   explosions.forEach((topLeft, index) => {
-    playFireMeteorImpactEffect(topLeft, index * 150, expectedToken);
+    playFireMeteorImpactEffect(topLeft, index * 150, expectedToken, runId);
   });
 
   gameInstance.time.delayedCall(980, () => {
-    if (expectedToken !== dragonCutInToken) {
+    if (!isCurrentRun(runId) || expectedToken !== dragonCutInToken) {
       return;
     }
     if (onComplete) onComplete();
@@ -3045,7 +3285,8 @@ function finishDragonSkillQueueIfIdle() {
 }
 
 function activatePendingDragonSkills(isFinalResolution = false) {
-  if (isGameOver) {
+  const runId = gameRunId;
+  if (isGameOver || !isCurrentRun(runId)) {
     return false;
   }
 
@@ -3060,7 +3301,7 @@ function activatePendingDragonSkills(isFinalResolution = false) {
 
   console.log('Activating pending dragon skills');
   sortPendingDragonSkillsByPriority();
-  while (pendingDragonSkills.length && !isGameOver) {
+  while (pendingDragonSkills.length && !isGameOver && isCurrentRun(runId)) {
     const skillType = pendingDragonSkills.shift();
     console.log('Pending skill activated:', skillType);
     console.log('Activating dragon skill by priority:', skillType);
@@ -3068,7 +3309,7 @@ function activatePendingDragonSkills(isFinalResolution = false) {
     if (skillType === 'fire') {
       const cutInToken = dragonCutInToken + 1;
       playDragonCutIn('fire', DRAGON_CUT_IN_CONFIGS.fire.title).then(() => {
-        if (isGameOver || cutInToken !== dragonCutInToken) {
+        if (isGameOver || !isCurrentRun(runId) || cutInToken !== dragonCutInToken) {
           return;
         }
 
@@ -3077,10 +3318,10 @@ function activatePendingDragonSkills(isFinalResolution = false) {
         activateFireDragonSkill();
         if (pendingFireStorm) {
           playFireMeteorSequence(() => {
-            if (!isGameOver) {
+            if (!isGameOver && isCurrentRun(runId)) {
               resolveBoard(true);
             }
-          }, cutInToken);
+          }, cutInToken, runId);
         }
       });
       return true;
@@ -3089,7 +3330,7 @@ function activatePendingDragonSkills(isFinalResolution = false) {
     if (skillType === 'ice') {
       const cutInToken = dragonCutInToken + 1;
       playDragonCutIn('ice', DRAGON_CUT_IN_CONFIGS.ice.title).then(() => {
-        if (isGameOver || cutInToken !== dragonCutInToken) {
+        if (isGameOver || !isCurrentRun(runId) || cutInToken !== dragonCutInToken) {
           return;
         }
 
@@ -3107,14 +3348,14 @@ function activatePendingDragonSkills(isFinalResolution = false) {
     if (skillType === 'leaf') {
       const cutInToken = dragonCutInToken + 1;
       playDragonCutIn('leaf', DRAGON_CUT_IN_CONFIGS.leaf.title).then(() => {
-        if (isGameOver || cutInToken !== dragonCutInToken) {
+        if (isGameOver || !isCurrentRun(runId) || cutInToken !== dragonCutInToken) {
           return;
         }
 
         console.log('Skill activated', skillType);
         resetDragonEnergyAfterActivation(skillType);
         playLeafBuffSweep(() => {
-          if (isGameOver || cutInToken !== dragonCutInToken) {
+          if (isGameOver || !isCurrentRun(runId) || cutInToken !== dragonCutInToken) {
             return;
           }
 
@@ -3131,7 +3372,7 @@ function activatePendingDragonSkills(isFinalResolution = false) {
     if (skillType === 'earth') {
       const cutInToken = dragonCutInToken + 1;
       playDragonCutIn('earth', DRAGON_CUT_IN_CONFIGS.earth.title).then(() => {
-        if (isGameOver || cutInToken !== dragonCutInToken) {
+        if (isGameOver || !isCurrentRun(runId) || cutInToken !== dragonCutInToken) {
           return;
         }
 
@@ -3173,7 +3414,8 @@ function activateEarthDragonSkill() {
 }
 
 function runPendingEarthPetrify() {
-  if (isGameOver) {
+  const runId = gameRunId;
+  if (isGameOver || !isCurrentRun(runId)) {
     console.log('Resolve stopped because game over');
     return;
   }
@@ -3194,14 +3436,14 @@ function runPendingEarthPetrify() {
   pulseCombo();
 
   showPetrifyEffect(convertedEggs, petrifyToken, () => {
-    if (isGameOver || petrifyToken !== earthPetrifyToken) {
+    if (isGameOver || !isCurrentRun(runId) || petrifyToken !== earthPetrifyToken) {
       console.log('Resolve stopped because game over');
       return;
     }
 
     earthPetrifyTimeout = setTimeout(() => {
       earthPetrifyTimeout = null;
-      if (isGameOver || petrifyToken !== earthPetrifyToken) {
+      if (isGameOver || !isCurrentRun(runId) || petrifyToken !== earthPetrifyToken) {
         console.log('Resolve stopped because game over');
         return;
       }
@@ -3209,13 +3451,13 @@ function runPendingEarthPetrify() {
       if (gameInstance && gameInstance.cameras && gameInstance.cameras.main) {
         gameInstance.cameras.main.shake(120, 0.004);
       }
-      clearAllEarthEggsFromPetrify();
+      clearAllEarthEggsFromPetrify(runId);
     }, EARTH_CONVERSION_HOLD);
   });
 }
 
-function clearAllEarthEggsFromPetrify() {
-  if (isGameOver) {
+function clearAllEarthEggsFromPetrify(runId = gameRunId) {
+  if (isGameOver || !isCurrentRun(runId)) {
     console.log('Resolve stopped because game over');
     return;
   }
@@ -3231,7 +3473,7 @@ function clearAllEarthEggsFromPetrify() {
   }
 
   grantDragonEnergyForDestroyedCells(destroyedCells, 'dragonSkill');
-  addScore(destroyedCells.size * MATCH_SCORE);
+  addScore(destroyedCells.size * MATCH_SCORE, runId);
 
   const boardCenter = getPlayableBoardCenter();
   if (destroyedCells.size > 0) {
@@ -3239,12 +3481,12 @@ function clearAllEarthEggsFromPetrify() {
   }
 
   animateRemovals(destroyedCells, () => {
-    if (isGameOver) {
+    if (isGameOver || !isCurrentRun(runId)) {
       console.log('Resolve stopped because game over');
       return;
     }
     resolveBoard(true);
-  }, { source: 'dragonSkill' });
+  }, { source: 'dragonSkill', runId });
 }
 
 function selectRandomEggsForEarthConversion(limit) {
@@ -4003,8 +4245,9 @@ function clearDragonSkillUi() {
   stopIceFreezeOverlay(true);
 }
 
-function addScore(baseScore) {
-  if (isGameOver) {
+function addScore(baseScore, runId = gameRunId) {
+  if (isGameOver || !isCurrentRun(runId)) {
+    console.log('Score ignored from stale run');
     return;
   }
 
@@ -4090,6 +4333,7 @@ function endGame() {
   isGameOver = true;
   isResolving = false;
   isAnimating = true;
+  activeDragInput = null;
   lastSwappedCells = [];
   pendingDragonSkills = [];
   dragonEnergyLocked = {
@@ -4147,6 +4391,7 @@ function resetGame() {
   dragonEnergy = [0, 0, 0, 0];
   isAnimating = false;
   selectedEgg = null;
+  activeDragInput = null;
   lastSwappedCells = [];
   pendingDragonSkills = [];
   dragonEnergyLocked = {
