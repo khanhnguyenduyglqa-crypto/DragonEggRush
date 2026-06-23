@@ -2,16 +2,22 @@
 
 ## Overview
 
-Dragon Egg Rush is a fast-paced Match-3 score attack game inspired by Dragon Mania Legends.
+Dragon Egg Rush is a fast-paced Phaser 3 Match-3 score attack game inspired by Dragon Mania Legends.
 
 Platform:
 
 * Web (Phaser 3)
 * Planned Electron desktop build
 
+Current status:
+
+* Feature complete demo build
+* Current focus is polish, balancing, audio quality, and performance cleanup if needed
+
 Game duration:
 
 * 90 seconds
+* Timer starts only after the first successful player move
 
 Goal:
 
@@ -21,37 +27,53 @@ Goal:
 
 # Board
 
-Board Size:
+Board size:
 
 * 6 rows x 6 columns
 
-Egg Types:
+Egg types:
 
 * Fire
 * Ice
 * Leaf
 * Earth
 
-Board Rules:
+Board rules:
 
 * Eggs fall from top to bottom.
 * Empty spaces are filled using gravity.
 * New eggs spawn from the top.
-* Combo chains are supported.
+* Cascades and combo chains are supported.
+* Board skin switching has been removed.
+* The board uses the default visual background while dragon skills use visual effects.
+
+Input:
+
+* Click one egg, then click an adjacent egg to swap.
+* Drag or swipe an egg toward an adjacent cell to swap.
+* Invalid swaps roll back.
 
 ---
 
 # Scoring
 
-Base Score:
+Base score:
 
 * 10 points per egg destroyed
 
 All scoring should use:
 
+```js
 addScore(baseScore)
+```
 
-This allows score multipliers to work correctly.
+This keeps score multipliers and stale-run safety centralized.
+
+Dragon skill destruction:
+
+* Still gives score.
+* Does not grant dragon energy.
+* Leaf x2 score can still multiply dragon skill score when the skill is part of an active boosted move chain.
 
 ---
 
@@ -66,7 +88,7 @@ Requirement:
 
 Effect:
 
-* Destroy matched eggs
+* Destroy matched eggs immediately.
 
 ---
 
@@ -79,20 +101,18 @@ Requirement:
 
 Effect:
 
-Horizontal Match 4:
+* Horizontal Match 4 clears a vertical column.
+* Vertical Match 4 clears a horizontal row.
 
-* Creates a vertical beam
-* Clears an entire column
+Visual:
 
-Vertical Match 4:
+* Beam effect from the trigger egg.
+* Beam fires in both directions along the clear direction.
 
-* Creates a horizontal beam
-* Clears an entire row
+Trigger:
 
-Beam Origin:
-
-* Uses the swapped egg position
-* If unavailable (combo chain), use fallback center
+* Uses the swapped egg when available.
+* Uses a fallback/key cell during automatic combo chains.
 
 ---
 
@@ -104,55 +124,34 @@ Requirement:
 
 Effect:
 
-* Destroy all eggs of that type currently on the board
+* Destroy all eggs of that type currently on the board.
+
+Visual:
+
+* Wavy energy links connect the trigger egg to same-color eggs before destruction.
 
 ---
 
-## L Shape
+## L Shape / T Shape
 
 Requirement:
 
-X
-X
-X X X
-
-or rotated variants
+* L or T pattern of the same egg type.
 
 Effect:
 
-* Destroy 3x3 area around center
+* Destroy a 3x3 area around the center/trigger egg.
 
-Priority:
+Visual:
 
-* Higher than Match 3
-* Lower than Match 5
-
----
-
-## T Shape
-
-Requirement:
-
-X X X
-X
-X
-
-or rotated variants
-
-Effect:
-
-* Destroy 3x3 area around center
-
-Priority:
-
-* Higher than Match 3
-* Lower than Match 5
+* Center egg enlarges dramatically.
+* Larger explosion effect detonates over the 3x3 area.
 
 ---
 
 # Match Priority
 
-Highest → Lowest
+Highest to lowest:
 
 1. Match 5
 2. L Shape / T Shape
@@ -161,200 +160,317 @@ Highest → Lowest
 
 ---
 
+# Delayed Special System
+
+Match 4, Match 5, L, and T specials use delayed activation:
+
+* Trigger egg remains on board.
+* Trigger egg blinks while waiting.
+* Other matched eggs are removed first.
+* Gravity and refill happen.
+* The special effect activates from the trigger egg after the board is full again.
+
+Match 3 does not use delayed activation.
+
+---
+
 # Combo Resolution
 
-Board resolution pipeline:
+Resolution pipeline:
 
+```text
 Detect Effects
-→ Sort by Priority
-→ Apply Effects
-→ Destroy Eggs
-→ Gravity
-→ Refill
-→ Repeat
+-> Sort by Priority
+-> Apply Effects
+-> Destroy Eggs
+-> Gravity
+-> Refill
+-> Repeat
+```
 
-Continue until no effects remain.
+Combo chain rules:
+
+* One successful player move creates one continuous combo chain.
+* Combo tracking remains continuous across normal cascades, delayed specials, dragon skills, gravity, refill, and skill-caused cascades.
+* Combo count resets only after the full chain ends and input is about to return.
+
+Cascade pacing:
+
+* A cascade cap prevents extremely long automatic chains.
+* Player chain cap and skill chain cap are configurable in code.
+* If the cap is reached, the board stabilizes safely and returns control without leaving holes or stale async steps.
 
 ---
 
 # Dragon Energy System
 
-Every destroyed egg grants +1 energy to its matching dragon.
+Energy requirement:
 
-Fire Egg
-→ Fire Dragon Energy
+* 30
 
-Ice Egg
-→ Ice Dragon Energy
+Energy gain:
 
-Leaf Egg
-→ Leaf Dragon Energy
+* Only eggs destroyed by normal match resolution grant dragon energy.
+* Eggs destroyed by dragon skills do not grant dragon energy.
 
-Earth Egg
-→ Earth Dragon Energy
+When energy reaches 30:
 
-Energy Requirement:
+* Energy clamps at 30/30.
+* Skill is marked READY.
+* Skill is queued.
+* Energy gain for that dragon is locked.
+* Energy does not reset yet.
 
-* 30 energy
+When the queued skill actually activates:
 
-When reaching 30:
+* Energy resets to 0.
+* READY state is removed.
 
-* Reset energy to 0
-* Queue skill activation
+Queue safety:
 
-Dragon skills should activate AFTER combo resolution is finished.
+* Each dragon can queue only once per combo chain.
+* Duplicate queued skills are skipped.
+* Locked dragons ignore additional energy until the chain and pending skills finish.
 
-Skills must never interrupt an active combo chain.
+Dragon priority:
 
----
+1. Fire
+2. Earth
+3. Leaf
+4. Ice
 
-# Fire Dragon
-
-Skill:
-Fire Storm
-
-Activation:
-
-* Auto
-
-Effect:
-
-* 5x5 explosion
-
-Explosion Center:
-Randomly chosen from one of the 4 middle cells:
-
-(2,2)
-(2,3)
-(3,2)
-(3,3)
-
-Bonus:
-
-* +50 score
-
-Uses:
-
-* Existing destroy
-* Gravity
-* Refill
-* Combo systems
+Ice is last so Frozen Time begins after other queued skill animations/effects finish.
 
 ---
 
-# Ice Dragon
+# Dragon Skills
 
-Skill:
-Frozen Time
+## Fire Dragon
 
-Activation:
+Player-facing skill name:
 
-* Auto
+* HÀ NỘI GIỮA THÁNG 6
 
-Effect:
+Gameplay:
 
-* Freeze countdown timer
+* Cut-in implemented.
+* Summons 3 meteors.
+* Each meteor targets a random 2x2 area.
+* Each meteor destroys its 2x2 area.
+* Overlapping explosion cells are deduplicated with Sets where appropriate.
 
-Duration:
+Visual/audio:
 
-* 5 seconds
-
-Rules:
-
-* Timer does not decrease
-* Player can still play
-* Combos continue
-* Dragon skills continue
-
-If activated while already active:
-
-* Refresh duration
-* Do not stack
+* Fire Dragon cut-in.
+* Custom cut-in roar audio.
+* Meteor warning markers.
+* Falling meteor visuals.
+* Explosion impact visuals.
+* Separate meteor fall and impact SFX.
 
 ---
 
-# Leaf Dragon
+## Ice Dragon
 
-Skill:
-Nature Blessing
+Player-facing skill name:
 
-Activation:
+* LỜI TỪ CHỐI CỦA CRUSH
 
-* Auto
+Gameplay:
 
-Effect:
+* Cut-in implemented.
+* Freezes the timer for 5 seconds.
+* Player can still play while the timer is frozen.
+* Refreshes duration if triggered while already active.
 
-* Score multiplier x2
+Visual/audio:
 
-Duration:
-
-* 5 seconds
-
-Rules:
-
-* Applies to ALL scoring sources
-* Refresh duration if triggered again
-* Never stack above x2
-
----
-
-# Earth Dragon
-
-Skill:
-Petrify
-
-Activation:
-
-* Auto
-
-Effect:
-
-* Convert 10 random non-earth eggs into Earth eggs
-
-Rules:
-
-* Do not directly destroy eggs
-* Wait briefly
-* Run normal match detection
-* Allow combo chains
-
-Purpose:
-
-* Manipulate board state
-* Create unexpected combos
+* Full-screen freeze effect.
+* Subtle frost overlay during Frozen Time.
+* Timer frame visually freezes.
+* Frozen visual fades when time resumes.
+* Custom cut-in roar audio.
+* Freeze start/end SFX.
 
 ---
 
-# Game Over
+## Leaf Dragon
 
-When timer reaches 0:
+Player-facing skill name:
 
-* Disable player input
-* Stop combo resolution
-* Stop gravity/refill
-* Stop dragon skill activation
-* Stop score changes
-* Show final score panel
+* RAU SẠCH CẤP ĐẠI HỌC
 
-Board remains visible but frozen.
+Gameplay:
+
+* Cut-in implemented.
+* Next 3 successful player moves gain x2 score.
+* Not time-based.
+* Buff refreshes back to 3 moves if activated again.
+* Buff consumes only after a successful player move and its full combo chain finish.
+
+Visual/audio:
+
+* Leaf Dragon cut-in.
+* Persistent leaf buff indicator.
+* Remaining charge display.
+* Score UI glow while active.
+* Leaf feedback when charges are consumed or expire.
+* Custom cut-in roar audio.
+* Wind/leaf activation SFX.
+* Dry-leaf charge consumption SFX.
 
 ---
 
-# Restart
+## Earth Dragon
 
-Restart must reset:
+Player-facing skill name:
 
-* Score
-* Timer
-* Board
-* Selected egg
-* Dragon energies
-* Active buffs
-* Combo state
-* Frozen Time state
-* Pending dragon skills
+* BÀNH TRƯỚNG LÃNH ĐỊA
 
-Then rebuild the board.
+Gameplay:
+
+* Cut-in implemented.
+* Converts 10 random non-earth eggs into Earth Eggs.
+* Then destroys all Earth Eggs on the board.
+* Earth skill destruction does not grant dragon energy.
+
+Visual/audio:
+
+* Earth Dragon cut-in.
+* Slower visible petrification/conversion animation.
+* Short hold so players can see converted eggs.
+* Earth shatter/destruction phase.
+* Custom cut-in roar audio.
+* Petrify and shatter SFX.
+
+---
+
+# UI
+
+Current UI systems:
+
+* Wooden sign header.
+* Improved title readability.
+* Custom image-based stat cards.
+* Dragon portrait and energy UI.
+* Dragon READY state.
+* Options menu.
+* Tutorial system.
+* Dragon info tooltip system.
+* Game over overlay.
+
+Header:
+
+* Uses a wooden hanging sign image.
+* Title sits directly on the sign.
+* Score, Timer, and Combo use replaceable stat-card assets.
+
+Options menu contains:
+
+* Music toggle
+* SFX toggle
+* Music volume slider
+* SFX volume slider
+* Restart Game
+* Tutorial
+
+Tutorial:
+
+* Modal popup overlay.
+* 3 pages: Basic Controls, Special Matches, Dragon Skills.
+* Blocks board input while open.
+* Tutorial visuals are isolated from gameplay and do not replace the real board.
+
+Tooltips:
+
+* Dragon info icons show English descriptions.
+* Tooltip appears after 150ms hover delay.
+* Tooltip hides immediately on pointer exit.
+* Tooltip stays on screen and does not require clicking.
+
+---
+
+# Audio
+
+Audio settings:
+
+* Music ON/OFF
+* SFX ON/OFF
+* Music Volume
+* SFX Volume
+* Settings persist in localStorage.
+
+Audio systems:
+
+* Centralized audio manager.
+* Procedural fallback sounds for missing assets.
+* Asset-based dragon cut-in roars.
+* Asset-based dragon skill effect SFX.
+
+Dragon cut-in roar assets:
+
+```text
+assets/audio/dragons/fire-roar.mp3
+assets/audio/dragons/ice-roar.mp3
+assets/audio/dragons/leaf-roar.mp3
+assets/audio/dragons/earth-roar.mp3
+```
+
+Dragon skill SFX assets:
+
+```text
+assets/audio/skills/fire-meteor-fall.mp3
+assets/audio/skills/fire-meteor-impact.mp3
+assets/audio/skills/ice-freeze-start.mp3
+assets/audio/skills/ice-freeze-end.mp3
+assets/audio/skills/leaf-blessing-start.mp3
+assets/audio/skills/leaf-charge-used.mp3
+assets/audio/skills/earth-petrify.mp3
+assets/audio/skills/earth-shatter.mp3
+```
+
+Replaceable asset rule:
+
+* Replace files with the same filenames.
+* Relaunch the game.
+* No code changes required.
+
+---
+
+# Restart / Hard Reset
+
+Restart is a hard reset.
+
+It must:
+
+* Increment the run/session token.
+* Stop old combo resolution.
+* Stop old async steps from modifying the new run.
+* Stop pending dragon skills.
+* Stop delayed specials.
+* Stop active cut-ins and temporary effects.
+* Reset score, timer, combo, board, energy, buffs, Frozen Time, selected egg, and input state.
+* Rebuild a fresh board.
+
+Stale async protection:
+
+* Async gameplay flows check the current run id before continuing after waits, timers, tweens, or delayed calls.
+* Old score events should not apply after restart.
+
+---
+
+# Bug Fixes / Stability
+
+Recent stability fixes:
+
+* Restart during combo no longer leaves old combo chains running.
+* Old score events are blocked after restart.
+* Tutorial rendering no longer replaces the gameplay board.
+* Board asset loading issues were resolved.
+* Dragon portrait asset paths were cleaned up.
+* Dragon skill queue stability was improved.
+* Cascade tracking remains continuous across dragon skills.
+* Combo pacing cap prevents very long autoplay sequences.
 
 ---
 
@@ -364,136 +480,20 @@ When modifying the game:
 
 DO:
 
-* Reuse existing systems
-* Reuse gravity
-* Reuse refill
-* Reuse resolveBoard()
+* Reuse existing systems.
+* Reuse gravity.
+* Reuse refill.
+* Reuse resolveBoard().
+* Integrate with the existing dragon skill queue.
+* Keep asset systems replaceable by filename when possible.
 
 DO NOT:
 
-* Rewrite core match detection
-* Create duplicate gravity systems
-* Create duplicate score systems
-* Create separate board resolution pipelines
+* Rewrite core match detection.
+* Rewrite gravity/refill.
+* Rewrite combo resolution architecture.
+* Create duplicate score systems.
+* Create separate board resolution pipelines.
+* Change dragon gameplay rules unless explicitly requested.
 
 Always integrate with the existing architecture.
-PROJECT_CONTEXT.md - UPDATE
-
-## Dragon Energy
-
-Energy Requirement:
-30
-
-When reaching 30:
-
-* Skill becomes READY
-* Energy remains locked at max
-* Energy gain stops
-* Skill enters queue
-
-Energy resets only after skill activation.
-
----
-
-## Dragon Queue Priority
-
-1. Ice
-2. Leaf
-3. Fire
-4. Earth
-
-Only one queued activation per dragon.
-
-Skills activate after combo resolution.
-
----
-
-## Dragon Skill Display
-
-Skill names are hidden during normal gameplay UI.
-
-Skill names are displayed only during dragon cut-ins.
-
----
-
-## Fire Dragon
-
-Display Name:
-HÀ NỘI GIỮA THÁNG 6
-
-Gameplay:
-
-* 3 random 2x2 explosions
-
-Visual:
-
-* Meteor strike sequence
-
----
-
-## Ice Dragon
-
-Display Name:
-LỜI TỪ CHỐI CỦA CRUSH
-
-Gameplay:
-
-* Freeze timer for 5 seconds
-
-Visual:
-
-* Fullscreen freeze effect
-* Frozen timer frame
-
----
-
-## Leaf Dragon
-
-Display Name:
-RAU SẠCH CẤP ĐẠI HỌC
-
-Gameplay:
-
-* Next 3 successful player moves gain x2 score
-
-Planned UI:
-
-* Visible remaining charges
-* Leaf buff indicator
-
----
-
-## Earth Dragon
-
-Display Name:
-BÀNH TRƯỚNG LÃNH ĐỊA
-
-Gameplay:
-
-* Convert 10 random non-earth eggs
-* Destroy all earth eggs
-
-Visual:
-
-* Delayed visible petrification phase
-
----
-
-## Special Match Presentation
-
-Match 4:
-
-* Beam attack presentation
-
-Match 5:
-
-* Wavy energy link presentation
-
-L/T:
-
-* Enlarged trigger egg
-* Charge-up
-* Explosion
-
-These are visual-only improvements.
-Gameplay logic remains unchanged.
