@@ -46,7 +46,21 @@
         <span>SFX Volume</span>
         <input type="range" id="sfxVolume" min="0" max="100" value="80" />
       </label>
+      <button id="tutorialButton" class="options-secondary-button" type="button">Tutorial</button>
       <button id="restartButton" class="options-restart-button" type="button">Restart Game</button>
+    </div>
+  </div>
+
+  <div id="tutorialOverlay" class="tutorial-overlay hidden">
+    <div class="tutorial-panel" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
+      <div class="tutorial-page-indicator" id="tutorialPageIndicator">1/3</div>
+      <h2 id="tutorialTitle">HOW TO PLAY</h2>
+      <ul id="tutorialContent" class="tutorial-content"></ul>
+      <div class="tutorial-actions">
+        <button id="tutorialBackButton" class="tutorial-button" type="button">Back</button>
+        <button id="tutorialCloseButton" class="tutorial-button tutorial-close-button" type="button">Close</button>
+        <button id="tutorialNextButton" class="tutorial-button tutorial-next-button" type="button">Next</button>
+      </div>
     </div>
   </div>
 
@@ -55,7 +69,7 @@
       <div class="energy-meter dragon-energy-row">
         <!-- Dragon portrait assets live in assets/dragons/. Replace placeholder images by dropping PNG files with the expected names. -->
         <div class="dragon-portrait-slot fire-portrait">
-          <img src="assets/dragons/fire_dragon.png" alt="Fire Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <img src="assets/dragons/fire-dragon.png" alt="Fire Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
           <span class="dragon-fallback" hidden>🔥</span>
         </div>
         <div class="energy-card fire-energy-card">
@@ -64,7 +78,7 @@
               <div class="energy-title"><span class="element-icon">🔥</span> Fire Dragon</div>
             </div>
             <span class="dragon-ready-badge" id="fireReadyBadge" hidden>READY</span>
-            <span class="info-icon">i</span>
+            <span class="info-icon" data-tooltip="Summon 3 meteors that destroy 2x2 areas.">i</span>
           </div>
           <div class="energy-bar-row">
             <div class="energy-bar">
@@ -76,7 +90,7 @@
       </div>
       <div class="energy-meter dragon-energy-row">
         <div class="dragon-portrait-slot ice-portrait">
-          <img src="assets/dragons/ice_dragon.png" alt="Ice Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <img src="assets/dragons/ice-dragon.png" alt="Ice Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
           <span class="dragon-fallback" hidden>❄️</span>
         </div>
         <div class="energy-card ice-energy-card">
@@ -85,7 +99,7 @@
               <div class="energy-title"><span class="element-icon">❄️</span> Ice Dragon</div>
             </div>
             <span class="dragon-ready-badge" id="iceReadyBadge" hidden>READY</span>
-            <span class="info-icon">i</span>
+            <span class="info-icon" data-tooltip="Freeze the timer for 5 seconds.">i</span>
           </div>
           <div class="energy-bar-row">
             <div class="energy-bar">
@@ -98,7 +112,7 @@
       </div>
       <div class="energy-meter dragon-energy-row">
         <div class="dragon-portrait-slot leaf-portrait">
-          <img src="assets/dragons/leaf_dragon.png" alt="Leaf Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <img src="assets/dragons/leaf-dragon.png" alt="Leaf Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
           <span class="dragon-fallback" hidden>🌿</span>
         </div>
         <div class="energy-card leaf-energy-card">
@@ -107,7 +121,7 @@
               <div class="energy-title"><span class="element-icon">🌿</span> Leaf Dragon</div>
             </div>
             <span class="dragon-ready-badge" id="leafReadyBadge" hidden>READY</span>
-            <span class="info-icon">i</span>
+            <span class="info-icon" data-tooltip="Next 3 moves gain 2x score.">i</span>
           </div>
           <div class="energy-bar-row">
             <div class="energy-bar">
@@ -120,7 +134,7 @@
       </div>
       <div class="energy-meter dragon-energy-row">
         <div class="dragon-portrait-slot earth-portrait">
-          <img src="assets/dragons/earth_dragon.png" alt="Earth Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+          <img src="assets/dragons/earth-dragon.png" alt="Earth Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
           <span class="dragon-fallback" hidden>🪨</span>
         </div>
         <div class="energy-card earth-energy-card">
@@ -129,7 +143,7 @@
               <div class="energy-title"><span class="element-icon">🪨</span> Earth Dragon</div>
             </div>
             <span class="dragon-ready-badge" id="earthReadyBadge" hidden>READY</span>
-            <span class="info-icon">i</span>
+            <span class="info-icon" data-tooltip="Convert 10 eggs into Earth Eggs and destroy all Earth Eggs.">i</span>
           </div>
           <div class="energy-bar-row">
             <div class="energy-bar">

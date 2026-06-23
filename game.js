@@ -14,7 +14,7 @@ const config = {
   parent: 'gameContainer',
   width: BOARD_RENDER_WIDTH,
   height: BOARD_RENDER_HEIGHT,
-  backgroundColor: '#0d0a1f',
+  transparent: true,
   scene: {
     preload: preload,
     create: create,
@@ -52,12 +52,69 @@ const DRAGON_SKILL_PRIORITY = {
   leaf: 3,
   ice: 4,
 };
+// Dragon cut-in audio is file-name based. Replace these files in assets/audio/dragons/
+// with the same names to reskin roar sounds without changing code.
+const DRAGON_ROAR_ASSETS = {
+  fire: {
+    key: 'fire-roar',
+    path: 'assets/audio/dragons/fire-roar.mp3',
+  },
+  ice: {
+    key: 'ice-roar',
+    path: 'assets/audio/dragons/ice-roar.mp3',
+  },
+  leaf: {
+    key: 'leaf-roar',
+    path: 'assets/audio/dragons/leaf-roar.mp3',
+  },
+  earth: {
+    key: 'earth-roar',
+    path: 'assets/audio/dragons/earth-roar.mp3',
+  },
+};
+// Dragon skill effect audio is also file-name based. Replace files in assets/audio/skills/
+// with the same names to reskin skill SFX without changing code.
+const DRAGON_SKILL_SFX_ASSETS = {
+  fireMeteorFall: {
+    key: 'fire-meteor-fall',
+    path: 'assets/audio/skills/fire-meteor-fall.mp3',
+  },
+  fireMeteorImpact: {
+    key: 'fire-meteor-impact',
+    path: 'assets/audio/skills/fire-meteor-impact.mp3',
+  },
+  iceFreezeStart: {
+    key: 'ice-freeze-start',
+    path: 'assets/audio/skills/ice-freeze-start.mp3',
+  },
+  iceFreezeEnd: {
+    key: 'ice-freeze-end',
+    path: 'assets/audio/skills/ice-freeze-end.mp3',
+  },
+  leafBlessingStart: {
+    key: 'leaf-blessing-start',
+    path: 'assets/audio/skills/leaf-blessing-start.mp3',
+  },
+  leafChargeUsed: {
+    key: 'leaf-charge-used',
+    path: 'assets/audio/skills/leaf-charge-used.mp3',
+  },
+  earthPetrify: {
+    key: 'earth-petrify',
+    path: 'assets/audio/skills/earth-petrify.mp3',
+  },
+  earthShatter: {
+    key: 'earth-shatter',
+    path: 'assets/audio/skills/earth-shatter.mp3',
+  },
+};
 const DRAGON_CUT_IN_CONFIGS = {
   fire: {
     dragonType: 'fire',
     title: 'HÀ NỘI GIỮA THÁNG 6',
     portraitKey: 'fire_dragon',
-    portraitPath: 'assets/dragons/fire_dragon.png',
+    portraitPath: 'assets/dragons/fire-dragon.png',
+    roarKey: DRAGON_ROAR_ASSETS.fire.key,
     visualStyle: 'fire',
     accentColor: 0xff6a1a,
     overlayColor: 0x050309,
@@ -69,7 +126,8 @@ const DRAGON_CUT_IN_CONFIGS = {
     dragonType: 'ice',
     title: 'LỜI TỪ CHỐI CỦA CRUSH',
     portraitKey: 'ice_dragon',
-    portraitPath: 'assets/dragons/ice_dragon.png',
+    portraitPath: 'assets/dragons/ice-dragon.png',
+    roarKey: DRAGON_ROAR_ASSETS.ice.key,
     visualStyle: 'ice',
     accentColor: 0x7ed8ff,
     overlayColor: 0x061627,
@@ -81,7 +139,8 @@ const DRAGON_CUT_IN_CONFIGS = {
     dragonType: 'leaf',
     title: 'RAU SẠCH CẤP ĐẠI HỌC',
     portraitKey: 'leaf_dragon',
-    portraitPath: 'assets/dragons/leaf_dragon.png',
+    portraitPath: 'assets/dragons/leaf-dragon.png',
+    roarKey: DRAGON_ROAR_ASSETS.leaf.key,
     visualStyle: 'leaf',
     accentColor: 0x72ff66,
     overlayColor: 0x071b0b,
@@ -93,7 +152,8 @@ const DRAGON_CUT_IN_CONFIGS = {
     dragonType: 'earth',
     title: 'BÀNH TRƯỚNG LÃNH ĐỊA',
     portraitKey: 'earth_dragon',
-    portraitPath: 'assets/dragons/earth_dragon.png',
+    portraitPath: 'assets/dragons/earth-dragon.png',
+    roarKey: DRAGON_ROAR_ASSETS.earth.key,
     visualStyle: 'earth',
     accentColor: 0xd8aa55,
     overlayColor: 0x1f1408,
@@ -110,6 +170,8 @@ const MATCH_SCORE = 10;
 const TIMER_SECONDS = 90;
 const EGG_DESTROY_DURATION = 260;
 const SWIPE_SWAP_THRESHOLD = 32;
+const MAX_PLAYER_CASCADE_STEPS = 8;
+const MAX_SKILL_CASCADE_STEPS = 5;
 const EARTH_CONVERSION_STAGGER = 55;
 const EARTH_CONVERSION_HOLD = 520;
 const EGG_DESTROY_THEMES = [
@@ -155,7 +217,7 @@ const DRAGON_CUT_IN_TIMING = {
 };
 const DEFAULT_BOARD_SKIN = {
   key: 'board-default',
-  path: 'assets/boards/default_board.png',
+  path: 'assets/boards/default-board.png',
 };
 const HEADER_BACKGROUND_ASSET = {
   key: 'header-bg',
@@ -172,6 +234,36 @@ const STAT_CARD_ASSETS = [
   },
 ];
 const STAT_CARD_ASSET_BY_KEY = Object.fromEntries(STAT_CARD_ASSETS.map((asset) => [asset.key, asset]));
+const AUDIO_SETTINGS_KEY = 'dragonEggRushAudioSettings';
+const TUTORIAL_STORAGE_KEY = 'dragonEggRushTutorialSeen';
+const TUTORIAL_PAGES = [
+  {
+    title: 'HOW TO PLAY',
+    lines: [
+      'Swap adjacent eggs to make matches.',
+      'Click one egg, then click a neighboring egg.',
+      'Or drag/swipe an egg toward a neighboring cell.',
+      'Match 3 or more eggs of the same type to score points.',
+    ],
+  },
+  {
+    title: 'SPECIAL MATCHES',
+    lines: [
+      'Match 4: fires a beam that clears a row or column.',
+      'Match 5: links to all eggs of the same type and destroys them.',
+      'L / T shape: creates a powerful 3x3 explosion.',
+    ],
+  },
+  {
+    title: 'DRAGON SKILLS',
+    lines: [
+      'Matching eggs charges the dragon of that element.',
+      'When energy reaches 30, the dragon skill becomes ready.',
+      'Skills activate automatically after the combo finishes.',
+      'Fire, Ice, Leaf, and Earth each have different effects.',
+    ],
+  },
+];
 let board = [];
 let tileSprites = [];
 let selectedEgg = null;
@@ -226,13 +318,31 @@ let restartButton;
 let optionsButton;
 let optionsOverlay;
 let optionsPanel;
+let tutorialButton;
+let tutorialOverlay;
+let tutorialTitle;
+let tutorialContent;
+let tutorialPageIndicator;
+let tutorialBackButton;
+let tutorialNextButton;
+let tutorialCloseButton;
+let musicToggle;
+let sfxToggle;
+let musicVolumeSlider;
+let sfxVolumeSlider;
 let overlayRestartButton;
 let gameInstance;
 let boardSkinSprite;
 let activeDragonCutIn = null;
 let dragonCutInToken = 0;
 let isOptionsPanelOpen = false;
+let isTutorialOpen = false;
+let tutorialPageIndex = 0;
 let gameRunId = 0;
+let audioManager = null;
+let currentComboChainId = 0;
+let currentComboCascadeStep = 0;
+let isComboChainActive = false;
 
 function preload() {
   this.load.image(DEFAULT_BOARD_SKIN.key, DEFAULT_BOARD_SKIN.path);
@@ -245,6 +355,12 @@ function preload() {
   });
   Object.values(DRAGON_CUT_IN_CONFIGS).forEach((dragon) => {
     this.load.image(dragon.portraitKey, dragon.portraitPath);
+  });
+  Object.values(DRAGON_ROAR_ASSETS).forEach((asset) => {
+    this.load.audio(asset.key, asset.path);
+  });
+  Object.values(DRAGON_SKILL_SFX_ASSETS).forEach((asset) => {
+    this.load.audio(asset.key, asset.path);
   });
 }
 
@@ -262,6 +378,18 @@ function create() {
   optionsButton = document.getElementById('optionsButton');
   optionsOverlay = document.getElementById('optionsOverlay');
   optionsPanel = document.getElementById('optionsPanel');
+  tutorialButton = document.getElementById('tutorialButton');
+  tutorialOverlay = document.getElementById('tutorialOverlay');
+  tutorialTitle = document.getElementById('tutorialTitle');
+  tutorialContent = document.getElementById('tutorialContent');
+  tutorialPageIndicator = document.getElementById('tutorialPageIndicator');
+  tutorialBackButton = document.getElementById('tutorialBackButton');
+  tutorialNextButton = document.getElementById('tutorialNextButton');
+  tutorialCloseButton = document.getElementById('tutorialCloseButton');
+  musicToggle = document.getElementById('musicToggle');
+  sfxToggle = document.getElementById('sfxToggle');
+  musicVolumeSlider = document.getElementById('musicVolume');
+  sfxVolumeSlider = document.getElementById('sfxVolume');
   overlayRestartButton = document.getElementById('overlayRestart');
 
   dragonEnergyText = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}EnergyProgress`));
@@ -269,7 +397,11 @@ function create() {
   dragonReadyBadge = DRAGON_TYPES.map((type) => document.getElementById(`${type.toLowerCase()}ReadyBadge`));
 
   restartButton.addEventListener('click', resetGame);
+  audioManager = createAudioManager();
+  setupAudioControls();
   setupOptionsPanel();
+  setupTutorial();
+  setupDragonInfoTooltips();
   overlayRestartButton.addEventListener('click', resetGame);
   this.input.on('pointermove', handleBoardPointerMove);
   this.input.on('pointerup', handleBoardPointerUp);
@@ -307,8 +439,19 @@ function setupOptionsPanel() {
     });
   }
 
+  if (tutorialButton) {
+    tutorialButton.addEventListener('click', () => {
+      setOptionsPanelOpen(false);
+      openTutorial(0);
+    });
+  }
+
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      if (isTutorialOpen) {
+        closeTutorial();
+        return;
+      }
       setOptionsPanelOpen(false);
     }
   });
@@ -319,14 +462,653 @@ function setOptionsPanelOpen(isOpen) {
     return;
   }
 
+  const wasOpen = isOptionsPanelOpen;
   isOptionsPanelOpen = isOpen;
   activeDragInput = null;
   optionsOverlay.classList.toggle('hidden', !isOpen);
   optionsButton.setAttribute('aria-expanded', String(isOpen));
+  if (audioManager && wasOpen !== isOpen) {
+    audioManager.unlock();
+    audioManager.playSfx(isOpen ? 'uiOpen' : 'uiClose');
+  }
 }
 
 function isCurrentRun(runId) {
   return runId === gameRunId;
+}
+
+function createAudioManager() {
+  const savedSettings = loadAudioSettings();
+  let audioContext = null;
+  let musicGain = null;
+  let sfxGain = null;
+  let bgmTimer = null;
+  let bgmStep = 0;
+  let unlocked = false;
+  const lastPlayed = {};
+  let activeCutInSound = null;
+  const warnedMissingDragonRoars = new Set();
+  const warnedMissingSkillSfx = new Set();
+  const bgmPattern = [
+    { root: 196, bell: 392 },
+    { root: 220, bell: 440 },
+    { root: 247, bell: 494 },
+    { root: 165, bell: 330 },
+  ];
+  const settings = {
+    musicEnabled: savedSettings.musicEnabled,
+    sfxEnabled: savedSettings.sfxEnabled,
+    musicVolume: savedSettings.musicVolume,
+    sfxVolume: savedSettings.sfxVolume,
+  };
+
+  function initContext() {
+    if (audioContext) {
+      return audioContext;
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      console.warn('Web Audio is not supported in this browser.');
+      return null;
+    }
+
+    audioContext = new AudioContextClass();
+    musicGain = audioContext.createGain();
+    sfxGain = audioContext.createGain();
+    musicGain.connect(audioContext.destination);
+    sfxGain.connect(audioContext.destination);
+    updateGains();
+    return audioContext;
+  }
+
+  function unlock() {
+    const context = initContext();
+    if (!context) {
+      return;
+    }
+
+    if (context.state === 'suspended') {
+      context.resume().catch(() => {});
+    }
+    unlocked = true;
+  }
+
+  function updateGains() {
+    if (!musicGain || !sfxGain) {
+      return;
+    }
+
+    const now = audioContext.currentTime;
+    musicGain.gain.setTargetAtTime(settings.musicEnabled ? settings.musicVolume : 0, now, 0.035);
+    sfxGain.gain.setTargetAtTime(settings.sfxEnabled ? settings.sfxVolume : 0, now, 0.02);
+  }
+
+  function saveSettings() {
+    try {
+      window.localStorage.setItem(AUDIO_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) {}
+  }
+
+  function playTone(frequency, duration = 0.18, options = {}) {
+    const context = initContext();
+    if (!context || !sfxGain || !settings.sfxEnabled) {
+      return;
+    }
+
+    const now = context.currentTime + (options.delay || 0);
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = options.type || 'sine';
+    oscillator.frequency.setValueAtTime(frequency, now);
+    if (options.toFrequency) {
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, options.toFrequency), now + duration);
+    }
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(options.gain || 0.16, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    oscillator.connect(gain);
+    gain.connect(sfxGain);
+    oscillator.start(now);
+    oscillator.stop(now + duration + 0.03);
+  }
+
+  function playNoise(duration = 0.22, options = {}) {
+    const context = initContext();
+    if (!context || !sfxGain || !settings.sfxEnabled) {
+      return;
+    }
+
+    const sampleRate = context.sampleRate;
+    const buffer = context.createBuffer(1, Math.max(1, Math.floor(sampleRate * duration)), sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+
+    const now = context.currentTime + (options.delay || 0);
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    source.buffer = buffer;
+    filter.type = options.filterType || 'lowpass';
+    filter.frequency.setValueAtTime(options.frequency || 900, now);
+    if (options.toFrequency) {
+      filter.frequency.exponentialRampToValueAtTime(Math.max(40, options.toFrequency), now + duration);
+    }
+    gain.gain.setValueAtTime(options.gain || 0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(sfxGain);
+    source.start(now);
+    source.stop(now + duration + 0.02);
+  }
+
+  function playBgmNote(frequency, startTime, duration, gainValue, type = 'sine') {
+    if (!audioContext || !musicGain || !settings.musicEnabled) {
+      return;
+    }
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, startTime);
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(gainValue, startTime + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    oscillator.connect(gain);
+    gain.connect(musicGain);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration + 0.04);
+  }
+
+  function scheduleBgmPhrase() {
+    if (!audioContext || !settings.musicEnabled) {
+      return;
+    }
+
+    const phrase = bgmPattern[bgmStep % bgmPattern.length];
+    const now = audioContext.currentTime;
+    playBgmNote(phrase.root, now, 2.6, 0.035, 'triangle');
+    playBgmNote(phrase.root * 1.5, now + 0.04, 2.4, 0.018, 'sine');
+    [0, 0.42, 0.84, 1.28].forEach((offset, index) => {
+      const multiplier = [1, 1.125, 1.5, 2][index];
+      playBgmNote(phrase.bell * multiplier, now + offset, 0.55, 0.028, 'sine');
+    });
+    bgmStep += 1;
+  }
+
+  function startBgm() {
+    if (!unlocked || bgmTimer || !settings.musicEnabled) {
+      updateGains();
+      return;
+    }
+
+    initContext();
+    scheduleBgmPhrase();
+    bgmTimer = window.setInterval(scheduleBgmPhrase, 2300);
+    updateGains();
+  }
+
+  function stopBgm() {
+    if (bgmTimer) {
+      window.clearInterval(bgmTimer);
+      bgmTimer = null;
+    }
+    updateGains();
+  }
+
+  function playSfx(name, options = {}) {
+    const context = initContext();
+    if (!context || !settings.sfxEnabled) {
+      return;
+    }
+
+    const nowMs = performance.now();
+    const throttle = options.throttle || 0;
+    if (throttle && lastPlayed[name] && nowMs - lastPlayed[name] < throttle) {
+      return;
+    }
+    lastPlayed[name] = nowMs;
+
+    if (name === 'button') {
+      playTone(740, 0.07, { type: 'triangle', gain: 0.06 });
+      playTone(960, 0.08, { delay: 0.035, type: 'sine', gain: 0.045 });
+    } else if (name === 'uiOpen') {
+      playTone(420, 0.12, { toFrequency: 680, type: 'triangle', gain: 0.08 });
+    } else if (name === 'uiClose') {
+      playTone(620, 0.1, { toFrequency: 360, type: 'triangle', gain: 0.07 });
+    } else if (name === 'tutorial') {
+      playTone(520, 0.09, { type: 'sine', gain: 0.055 });
+      playTone(780, 0.11, { delay: 0.045, type: 'sine', gain: 0.05 });
+    } else if (name === 'match') {
+      playNoise(0.14, { frequency: 1200, toFrequency: 420, gain: 0.075, throttle: 80 });
+      playTone(520, 0.11, { type: 'triangle', gain: 0.045 });
+    } else if (name === 'match4') {
+      playTone(240, 0.34, { toFrequency: 980, type: 'sawtooth', gain: 0.08 });
+      playNoise(0.22, { filterType: 'bandpass', frequency: 1600, gain: 0.05 });
+    } else if (name === 'match5') {
+      [440, 660, 880, 1320].forEach((frequency, index) => {
+        playTone(frequency, 0.2, { delay: index * 0.06, type: 'sine', gain: 0.055 });
+      });
+    } else if (name === 'areaExplosion') {
+      playNoise(0.34, { frequency: 420, toFrequency: 90, gain: 0.16 });
+      playTone(92, 0.36, { type: 'sine', gain: 0.11 });
+    } else if (name === 'fireSkill') {
+      playNoise(0.5, { frequency: 520, toFrequency: 130, gain: 0.13 });
+      playTone(110, 0.48, { type: 'sawtooth', gain: 0.07 });
+    } else if (name === 'meteor') {
+      playNoise(0.32, { frequency: 380, toFrequency: 80, gain: 0.18 });
+      playTone(74, 0.28, { type: 'sine', gain: 0.12 });
+    } else if (name === 'iceSkill') {
+      playNoise(0.42, { filterType: 'highpass', frequency: 1800, toFrequency: 420, gain: 0.1 });
+      playTone(880, 0.22, { toFrequency: 440, type: 'triangle', gain: 0.07 });
+    } else if (name === 'leafSkill') {
+      [523, 659, 784].forEach((frequency, index) => {
+        playTone(frequency, 0.32, { delay: index * 0.08, type: 'sine', gain: 0.055 });
+      });
+      playNoise(0.24, { filterType: 'highpass', frequency: 1300, gain: 0.035 });
+    } else if (name === 'earthSkill') {
+      playNoise(0.48, { frequency: 260, toFrequency: 70, gain: 0.16 });
+      playTone(62, 0.52, { type: 'sine', gain: 0.13 });
+    }
+  }
+
+  function stopCutInSound() {
+    if (!activeCutInSound) {
+      return;
+    }
+
+    try {
+      if (activeCutInSound.isPlaying && activeCutInSound.stop) {
+        activeCutInSound.stop();
+      }
+      if (activeCutInSound.destroy) {
+        activeCutInSound.destroy();
+      }
+    } catch (e) {}
+    activeCutInSound = null;
+  }
+
+  function playDragonRoar(dragonType, roarKey) {
+    stopCutInSound();
+    if (!settings.sfxEnabled) {
+      return;
+    }
+
+    unlock();
+
+    const fallbackSfx = {
+      fire: 'fireSkill',
+      ice: 'iceSkill',
+      leaf: 'leafSkill',
+      earth: 'earthSkill',
+    };
+
+    if (gameInstance && roarKey && gameInstance.sound && gameInstance.cache && gameInstance.cache.audio) {
+      try {
+        if (gameInstance.cache.audio.exists(roarKey)) {
+          const roar = gameInstance.sound.add(roarKey, {
+            volume: settings.sfxVolume,
+          });
+          activeCutInSound = roar;
+          roar.once('complete', () => {
+            if (activeCutInSound === roar) {
+              activeCutInSound = null;
+            }
+            if (roar.destroy) {
+              roar.destroy();
+            }
+          });
+          roar.play();
+          return;
+        }
+      } catch (e) {
+        console.warn('Dragon roar audio unavailable, using fallback:', roarKey);
+      }
+    }
+
+    if (roarKey && !warnedMissingDragonRoars.has(roarKey)) {
+      warnedMissingDragonRoars.add(roarKey);
+      console.warn('Dragon roar audio missing, using fallback:', roarKey);
+    }
+
+    playSfx(fallbackSfx[dragonType] || 'uiOpen', { throttle: 0 });
+  }
+
+  function playSkillSfx(assetKey, fallbackName, options = {}) {
+    if (!settings.sfxEnabled) {
+      return;
+    }
+
+    unlock();
+
+    const nowMs = performance.now();
+    const throttle = options.throttle || 0;
+    const throttleKey = `asset:${assetKey}`;
+    if (throttle && lastPlayed[throttleKey] && nowMs - lastPlayed[throttleKey] < throttle) {
+      return;
+    }
+    lastPlayed[throttleKey] = nowMs;
+
+    if (gameInstance && assetKey && gameInstance.sound && gameInstance.cache && gameInstance.cache.audio) {
+      try {
+        if (gameInstance.cache.audio.exists(assetKey)) {
+          const sound = gameInstance.sound.add(assetKey, {
+            volume: settings.sfxVolume,
+          });
+          sound.once('complete', () => {
+            if (sound.destroy) {
+              sound.destroy();
+            }
+          });
+          sound.play();
+          return;
+        }
+      } catch (e) {
+        console.warn('Skill SFX audio unavailable, using fallback:', assetKey);
+      }
+    }
+
+    if (assetKey && !warnedMissingSkillSfx.has(assetKey)) {
+      warnedMissingSkillSfx.add(assetKey);
+      console.warn('Skill SFX audio missing, using fallback:', assetKey);
+    }
+
+    if (fallbackName) {
+      playSfx(fallbackName, options);
+    }
+  }
+
+  return {
+    settings,
+    unlock,
+    playSfx,
+    playDragonRoar,
+    playSkillSfx,
+    stopCutInSound,
+    startBgm,
+    stopBgm,
+    setMusicEnabled(value) {
+      settings.musicEnabled = Boolean(value);
+      if (settings.musicEnabled && gameStarted) {
+        startBgm();
+      } else {
+        stopBgm();
+      }
+      saveSettings();
+    },
+    setSfxEnabled(value) {
+      settings.sfxEnabled = Boolean(value);
+      if (!settings.sfxEnabled) {
+        stopCutInSound();
+      }
+      updateGains();
+      saveSettings();
+    },
+    setMusicVolume(value) {
+      settings.musicVolume = Phaser.Math.Clamp(Number(value) / 100, 0, 1);
+      updateGains();
+      saveSettings();
+    },
+    setSfxVolume(value) {
+      settings.sfxVolume = Phaser.Math.Clamp(Number(value) / 100, 0, 1);
+      if (activeCutInSound && activeCutInSound.setVolume) {
+        activeCutInSound.setVolume(settings.sfxVolume);
+      }
+      updateGains();
+      saveSettings();
+    },
+  };
+}
+
+function loadAudioSettings() {
+  const fallback = {
+    musicEnabled: true,
+    sfxEnabled: true,
+    musicVolume: 0.7,
+    sfxVolume: 0.8,
+  };
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(AUDIO_SETTINGS_KEY));
+    if (!parsed) {
+      return fallback;
+    }
+    return {
+      musicEnabled: parsed.musicEnabled !== false,
+      sfxEnabled: parsed.sfxEnabled !== false,
+      musicVolume: Phaser.Math.Clamp(Number(parsed.musicVolume ?? fallback.musicVolume), 0, 1),
+      sfxVolume: Phaser.Math.Clamp(Number(parsed.sfxVolume ?? fallback.sfxVolume), 0, 1),
+    };
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function setupAudioControls() {
+  if (!audioManager) {
+    return;
+  }
+
+  if (musicToggle) {
+    musicToggle.checked = audioManager.settings.musicEnabled;
+    musicToggle.addEventListener('change', () => {
+      audioManager.unlock();
+      audioManager.setMusicEnabled(musicToggle.checked);
+    });
+  }
+  if (sfxToggle) {
+    sfxToggle.checked = audioManager.settings.sfxEnabled;
+    sfxToggle.addEventListener('change', () => {
+      audioManager.unlock();
+      audioManager.setSfxEnabled(sfxToggle.checked);
+      audioManager.playSfx('button');
+    });
+  }
+  if (musicVolumeSlider) {
+    musicVolumeSlider.value = Math.round(audioManager.settings.musicVolume * 100);
+    musicVolumeSlider.addEventListener('input', () => {
+      audioManager.unlock();
+      audioManager.setMusicVolume(musicVolumeSlider.value);
+    });
+  }
+  if (sfxVolumeSlider) {
+    sfxVolumeSlider.value = Math.round(audioManager.settings.sfxVolume * 100);
+    sfxVolumeSlider.addEventListener('input', () => {
+      audioManager.unlock();
+      audioManager.setSfxVolume(sfxVolumeSlider.value);
+      audioManager.playSfx('button', { throttle: 120 });
+    });
+  }
+
+  document.addEventListener('pointerdown', () => {
+    audioManager.unlock();
+  }, { once: true });
+
+  document.addEventListener('click', (event) => {
+    if (event.target && event.target.closest && event.target.closest('button')) {
+      audioManager.unlock();
+      audioManager.playSfx('button', { throttle: 45 });
+    }
+  });
+}
+
+function setupTutorial() {
+  if (!tutorialOverlay || !tutorialTitle || !tutorialContent || !tutorialPageIndicator) {
+    return;
+  }
+
+  tutorialOverlay.addEventListener('click', () => {
+    closeTutorial();
+  });
+
+  const tutorialPanel = tutorialOverlay.querySelector('.tutorial-panel');
+  if (tutorialPanel) {
+    tutorialPanel.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+  }
+
+  if (tutorialBackButton) {
+    tutorialBackButton.addEventListener('click', () => {
+      if (audioManager) audioManager.playSfx('tutorial');
+      setTutorialPage(tutorialPageIndex - 1);
+    });
+  }
+
+  if (tutorialNextButton) {
+    tutorialNextButton.addEventListener('click', () => {
+      if (audioManager) audioManager.playSfx('tutorial');
+      if (tutorialPageIndex >= TUTORIAL_PAGES.length - 1) {
+        closeTutorial();
+        return;
+      }
+      setTutorialPage(tutorialPageIndex + 1);
+    });
+  }
+
+  if (tutorialCloseButton) {
+    tutorialCloseButton.addEventListener('click', closeTutorial);
+  }
+
+  renderTutorialPage();
+}
+
+function setTutorialSeen() {
+  try {
+    window.localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+  } catch (e) {}
+}
+
+function openTutorial(pageIndex = 0) {
+  if (!tutorialOverlay) {
+    return;
+  }
+
+  setOptionsPanelOpen(false);
+  isTutorialOpen = true;
+  activeDragInput = null;
+  if (audioManager) {
+    audioManager.unlock();
+    audioManager.playSfx('uiOpen');
+  }
+  setTutorialPage(pageIndex);
+  tutorialOverlay.classList.remove('hidden');
+}
+
+function closeTutorial() {
+  if (!tutorialOverlay) {
+    return;
+  }
+
+  isTutorialOpen = false;
+  activeDragInput = null;
+  tutorialOverlay.classList.add('hidden');
+  destroyTutorialDemoObjects();
+  setTutorialSeen();
+  if (audioManager) audioManager.playSfx('uiClose');
+}
+
+function destroyTutorialDemoObjects() {
+  // Tutorial is DOM-only. This hook keeps tutorial visuals isolated if a demo is added later.
+}
+
+function setTutorialPage(pageIndex) {
+  tutorialPageIndex = Phaser.Math.Clamp(pageIndex, 0, TUTORIAL_PAGES.length - 1);
+  renderTutorialPage();
+}
+
+function renderTutorialPage() {
+  if (!tutorialTitle || !tutorialContent || !tutorialPageIndicator) {
+    return;
+  }
+
+  const page = TUTORIAL_PAGES[tutorialPageIndex];
+  tutorialTitle.textContent = page.title;
+  tutorialPageIndicator.textContent = `${tutorialPageIndex + 1}/${TUTORIAL_PAGES.length}`;
+  tutorialContent.innerHTML = '';
+  page.lines.forEach((line) => {
+    const item = document.createElement('li');
+    item.textContent = line;
+    tutorialContent.appendChild(item);
+  });
+
+  if (tutorialBackButton) {
+    tutorialBackButton.disabled = tutorialPageIndex === 0;
+  }
+  if (tutorialNextButton) {
+    tutorialNextButton.textContent = tutorialPageIndex === TUTORIAL_PAGES.length - 1 ? 'Start' : 'Next';
+  }
+}
+
+function setupDragonInfoTooltips() {
+  const icons = document.querySelectorAll('.info-icon[data-tooltip]');
+  if (!icons.length) {
+    return;
+  }
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'dragon-tooltip hidden';
+  document.body.appendChild(tooltip);
+  let hoverTimer = null;
+
+  const clearHoverTimer = () => {
+    if (hoverTimer) {
+      window.clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }
+  };
+
+  const hideTooltip = () => {
+    clearHoverTimer();
+    tooltip.classList.add('hidden');
+    tooltip.textContent = '';
+  };
+
+  const positionTooltip = (icon) => {
+    const iconRect = icon.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const gap = 10;
+    const margin = 12;
+    let left = iconRect.right + gap;
+    let top = iconRect.top + iconRect.height / 2 - tooltipRect.height / 2;
+
+    if (left + tooltipRect.width + margin > window.innerWidth) {
+      left = iconRect.left - tooltipRect.width - gap;
+    }
+    if (left < margin) {
+      left = margin;
+    }
+    if (top + tooltipRect.height + margin > window.innerHeight) {
+      top = window.innerHeight - tooltipRect.height - margin;
+    }
+    if (top < margin) {
+      top = margin;
+    }
+
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+
+  icons.forEach((icon) => {
+    icon.addEventListener('pointerenter', () => {
+      clearHoverTimer();
+      hoverTimer = window.setTimeout(() => {
+        hoverTimer = null;
+        tooltip.textContent = icon.dataset.tooltip || '';
+        tooltip.classList.remove('hidden');
+        positionTooltip(icon);
+      }, 150);
+    });
+
+    icon.addEventListener('pointerleave', hideTooltip);
+    icon.addEventListener('pointercancel', hideTooltip);
+  });
+
+  window.addEventListener('resize', hideTooltip);
+  window.addEventListener('scroll', hideTooltip, true);
 }
 
 function generateEggTextures() {
@@ -448,6 +1230,12 @@ function createBoardSkinLayer() {
   console.log('cellHeight', metrics.cellHeight);
 
   // Board uses default background only. Dragon skills use visual effects instead of board skin switching.
+  if (!gameInstance.textures.exists(DEFAULT_BOARD_SKIN.key)) {
+    console.warn('Default board texture missing; using CSS board background fallback.');
+    boardSkinSprite = null;
+    return;
+  }
+
   boardSkinSprite = gameInstance.add.image(metrics.boardX, metrics.boardY, DEFAULT_BOARD_SKIN.key);
   boardSkinSprite.setOrigin(0, 0);
   boardSkinSprite.setDisplaySize(metrics.boardWidth, metrics.boardHeight);
@@ -522,7 +1310,7 @@ function getEggTextureKey(type) {
 }
 
 function canAcceptBoardInput() {
-  return !isOptionsPanelOpen && !isGameOver && !isAnimating && timer > 0;
+  return !isOptionsPanelOpen && !isTutorialOpen && !isGameOver && !isAnimating && timer > 0;
 }
 
 function attachEggInputHandlers(sprite) {
@@ -774,6 +1562,13 @@ function clearPhaserGameplayObjects() {
   tileSprites = [];
 }
 
+function rebuildGameplayBoard() {
+  clearPhaserGameplayObjects();
+  initializeBoard();
+  createBoardSkinLayer();
+  createBoardSprites();
+}
+
 function isAdjacent(a, b) {
   return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
 }
@@ -861,6 +1656,10 @@ function swapEggs(first, second) {
       if (!gameStarted) {
         gameStarted = true;
         console.log('First valid move detected');
+        if (audioManager) {
+          audioManager.unlock();
+          audioManager.startBgm();
+        }
         startTimer();
       }
       lastSwappedCells = [
@@ -870,6 +1669,7 @@ function swapEggs(first, second) {
       console.log('lastSwappedCells', lastSwappedCells);
       selectedEgg = null;
       // Manual match start: set combo to 1 and show feedback
+      startComboChain();
       startLeafScoreForSuccessfulMove();
       comboCount = 1;
       updateUi();
@@ -1273,6 +2073,98 @@ function clearDelayedSpecialQueue() {
   delayedSpecialQueue = [];
 }
 
+function startComboChain() {
+  currentComboChainId += 1;
+  currentComboCascadeStep = 0;
+  isComboChainActive = true;
+  console.log('Combo chain started:', currentComboChainId);
+}
+
+function ensureComboChainActive() {
+  if (!isComboChainActive) {
+    startComboChain();
+  }
+}
+
+function endComboChain() {
+  if (!isComboChainActive) {
+    return;
+  }
+
+  console.log('Combo chain ended:', currentComboChainId);
+  currentComboCascadeStep = 0;
+  isComboChainActive = false;
+}
+
+function getCascadeLimit(isAutomatic) {
+  return isAutomatic ? Math.min(MAX_PLAYER_CASCADE_STEPS, MAX_SKILL_CASCADE_STEPS) : MAX_PLAYER_CASCADE_STEPS;
+}
+
+function getCellsFromEffects(effects) {
+  const cellsByKey = new Map();
+  effects.forEach((effect) => {
+    effect.matchedCells.forEach((cell) => {
+      cellsByKey.set(`${cell.row}-${cell.col}`, cell);
+    });
+  });
+  return Array.from(cellsByKey.values());
+}
+
+function rerollCellType(row, col) {
+  const currentType = board[row] && board[row][col];
+  let nextType = currentType;
+  let attempts = 0;
+  while (nextType === currentType && attempts < 8) {
+    nextType = Phaser.Math.Between(0, EGG_TYPES.length - 1);
+    attempts += 1;
+  }
+  board[row][col] = nextType;
+}
+
+function syncBoardSpritesToBoard() {
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      const sprite = ensureSpriteAt(row, col);
+      const type = board[row][col];
+      sprite.setData('type', type);
+      sprite.setTexture(getEggTextureKey(type));
+      setEggDisplaySize(sprite);
+    }
+  }
+  resetBoardVisuals();
+}
+
+function stabilizeBoardAfterCascadeCap() {
+  let attempts = 0;
+  let effects = detectPatterns();
+  while (effects.length && attempts < 20) {
+    getCellsFromEffects(effects).forEach((cell) => {
+      rerollCellType(cell.row, cell.col);
+    });
+    attempts += 1;
+    effects = detectPatterns();
+  }
+  syncBoardSpritesToBoard();
+  console.log('Board stabilized after cascade cap');
+}
+
+function finishResolveBoardChain(isAutomatic, stepNumber, wasCascadeCapped = false) {
+  console.log(wasCascadeCapped ? 'Combo chain capped' : 'chain finished');
+  console.log('Combo chain finished');
+  isResolving = false;
+  updateUi();
+  if (activatePendingDragonSkills(true)) {
+    return;
+  }
+  finishLeafScoreForSuccessfulMove();
+  unlockAllDragonEnergy();
+  endComboChain();
+  comboCount = 0;
+  updateUi();
+  isAnimating = false;
+  enableBoardInput();
+}
+
 function resolveBoard(isAutomatic = false) {
   const runId = gameRunId;
   if (isGameOver || !isCurrentRun(runId)) {
@@ -1282,10 +2174,12 @@ function resolveBoard(isAutomatic = false) {
 
   isResolving = true;
   isAnimating = true;
+  ensureComboChainActive();
   deselectEgg();
   console.log('selection cleared after destroy');
 
   let stepNumber = 0;
+  const cascadeLimit = getCascadeLimit(isAutomatic);
   let firstStep = !isAutomatic;
 
   const runStep = () => {
@@ -1336,21 +2230,23 @@ function resolveBoard(isAutomatic = false) {
         return;
       }
 
-      console.log('chain finished');
-      console.log('Combo chain finished');
-      isResolving = false;
-      if (!isAutomatic && stepNumber === 1) {
-        // if this was a manual trigger with no matches, reset combo
-        comboCount = 0;
-      }
-      updateUi();
-      if (activatePendingDragonSkills(true)) {
-        return;
-      }
-      finishLeafScoreForSuccessfulMove();
-      unlockAllDragonEnergy();
-      isAnimating = false;
+      finishResolveBoardChain(isAutomatic, stepNumber);
       return;
+    }
+
+    const countsTowardCascadeLimit = isAutomatic || !firstStep;
+    if (countsTowardCascadeLimit && currentComboCascadeStep >= cascadeLimit) {
+      console.log('Cascade cap reached:', currentComboCascadeStep, '/', cascadeLimit);
+      stabilizeBoardAfterCascadeCap();
+      const center = getPlayableBoardCenter();
+      createScorePopup(center.x, center.y, 'Board Stabilized!', 24);
+      finishResolveBoardChain(isAutomatic, stepNumber, true);
+      return;
+    }
+
+    if (countsTowardCascadeLimit) {
+      currentComboCascadeStep += 1;
+      console.log('Global cascade step:', currentComboCascadeStep, '/', cascadeLimit);
     }
 
     const useSwappedTrigger = firstStep && !isAutomatic;
@@ -1544,6 +2440,7 @@ function playMatch4BeamEffect(triggerCell, affectedCells, direction, onComplete)
     if (onComplete) onComplete();
     return;
   }
+  if (audioManager) audioManager.playSfx('match4', { throttle: 180 });
 
   const triggerType = board[triggerCell.row] && board[triggerCell.row][triggerCell.col];
   const theme = getEggDestroyTheme(triggerType);
@@ -1673,6 +2570,7 @@ function playMatch5LinkEffect(triggerCell, affectedCells, eggType, onComplete) {
     if (onComplete) onComplete();
     return;
   }
+  if (audioManager) audioManager.playSfx('match5', { throttle: 240 });
 
   const theme = getEggDestroyTheme(eggType);
   const origin = getEggPosition(triggerCell.row, triggerCell.col);
@@ -1739,6 +2637,7 @@ function playAreaExplosionEffect(centerCell, affectedCells, onComplete) {
     if (onComplete) onComplete();
     return;
   }
+  if (audioManager) audioManager.playSfx('areaExplosion', { throttle: 220 });
 
   const centerType = board[centerCell.row] && board[centerCell.row][centerCell.col];
   const theme = getEggDestroyTheme(centerType);
@@ -2101,6 +3000,9 @@ function animateRemovals(removalSet, onComplete, options = {}) {
   }
 
   deselectEgg();
+  if (audioManager && removalSet && removalSet.size > 0) {
+    audioManager.playSfx(source === 'match' ? 'match' : 'areaExplosion', { throttle: source === 'match' ? 95 : 180 });
+  }
   const toRemove = Array.from(removalSet).map((key) => {
     const [row, col] = key.split('-').map(Number);
     return {
@@ -2529,6 +3431,9 @@ function pulseDragonEnergyReady(index) {
 
 function cancelActiveDragonCutIn() {
   dragonCutInToken += 1;
+  if (audioManager) {
+    audioManager.stopCutInSound();
+  }
   if (activeDragonCutIn && activeDragonCutIn.cleanup) {
     activeDragonCutIn.cleanup();
   }
@@ -2556,6 +3461,9 @@ async function playDragonCutIn(dragonType, title) {
   const wasAnimating = isAnimating;
   isAnimating = true;
   disableBoardInput();
+  if (audioManager) {
+    audioManager.playDragonRoar(dragonType, cutInConfig.roarKey);
+  }
 
   return new Promise((resolve) => {
     const centerX = BOARD_RENDER_WIDTH / 2;
@@ -2994,6 +3902,9 @@ function triggerFireStorm() {
 
 function showFireStormEffect(topLeft) {
   if (!gameInstance) return;
+  if (audioManager) {
+    audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.fireMeteorImpact.key, 'meteor', { throttle: 110 });
+  }
   const first = getEggPosition(topLeft.row, topLeft.col);
   const second = getEggPosition(topLeft.row + 1, topLeft.col + 1);
   const x = (first.x + second.x) / 2;
@@ -3112,6 +4023,9 @@ function playFireMeteorImpactEffect(topLeft, delay = 0, expectedToken = dragonCu
       return;
     }
 
+    if (audioManager) {
+      audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.fireMeteorFall.key, 'fireSkill', { throttle: 110 });
+    }
     meteor.setAlpha(1);
     gameInstance.tweens.add({
       targets: meteor,
@@ -3280,6 +4194,9 @@ function finishDragonSkillQueueIfIdle() {
 
   finishLeafScoreForSuccessfulMove();
   unlockAllDragonEnergy();
+  endComboChain();
+  comboCount = 0;
+  updateUi();
   isAnimating = false;
   enableBoardInput();
 }
@@ -3434,6 +4351,9 @@ function runPendingEarthPetrify() {
   comboCount = 1;
   updateUi();
   pulseCombo();
+  if (audioManager) {
+    audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.earthPetrify.key, 'earthSkill');
+  }
 
   showPetrifyEffect(convertedEggs, petrifyToken, () => {
     if (isGameOver || !isCurrentRun(runId) || petrifyToken !== earthPetrifyToken) {
@@ -3463,6 +4383,9 @@ function clearAllEarthEggsFromPetrify(runId = gameRunId) {
   }
 
   console.log('Earth Dragon: clearing all Earth eggs');
+  if (audioManager) {
+    audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.earthShatter.key, 'areaExplosion', { throttle: 220 });
+  }
   const destroyedCells = new Set();
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
@@ -3795,6 +4718,9 @@ function activateLeafDragonSkill() {
   }
 
   leafDoubleScoreMovesRemaining = 3;
+  if (audioManager) {
+    audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.leafBlessingStart.key, 'leafSkill');
+  }
   if (leafDoubleScoreActiveForCurrentMove) {
     leafSkillRefreshedDuringCurrentMove = true;
   }
@@ -3851,6 +4777,11 @@ function finishLeafScoreForSuccessfulMove() {
   }
 
   console.log('Leaf moves remaining:', leafDoubleScoreMovesRemaining);
+  if (previousMovesRemaining !== leafDoubleScoreMovesRemaining) {
+    if (audioManager) {
+      audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.leafChargeUsed.key, 'leafSkill', { throttle: 140 });
+    }
+  }
   if (previousMovesRemaining !== leafDoubleScoreMovesRemaining && leafDoubleScoreMovesRemaining > 0) {
     playLeafFallAnimation(5);
   }
@@ -4148,6 +5079,9 @@ function activateIceDragonSkill() {
   }
 
   console.log('Ice Dragon skill activated - Frozen Time!');
+  if (audioManager) {
+    audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.iceFreezeStart.key, 'iceSkill');
+  }
   
   if (frozenTimeEvent) {
     clearTimeout(frozenTimeEvent);
@@ -4187,6 +5121,9 @@ function deactivateFrozenTime() {
   frozenTimeActive = false;
   frozenTimeRemaining = 0;
   console.log('Frozen Time ended');
+  if (audioManager) {
+    audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.iceFreezeEnd.key, 'iceSkill');
+  }
   
   const iceMeterElement = document.querySelector('.energy-meter:nth-child(2)');
   if (iceMeterElement) {
@@ -4336,6 +5273,8 @@ function endGame() {
   activeDragInput = null;
   lastSwappedCells = [];
   pendingDragonSkills = [];
+  currentComboCascadeStep = 0;
+  isComboChainActive = false;
   dragonEnergyLocked = {
     fire: false,
     ice: false,
@@ -4381,12 +5320,23 @@ function endGame() {
 }
 
 function resetGame() {
+  gameRunId += 1;
+  setOptionsPanelOpen(false);
+  if (tutorialOverlay) {
+    isTutorialOpen = false;
+    tutorialOverlay.classList.add('hidden');
+    destroyTutorialDemoObjects();
+  }
+  activeDragInput = null;
+  stopGameplayTweensAndTimers();
   gameOverOverlay.classList.add('hidden');
   isGameOver = false;
   isResolving = false;
   gameStarted = false;
   score = 0;
   comboCount = 0;
+  currentComboCascadeStep = 0;
+  isComboChainActive = false;
   timer = TIMER_SECONDS;
   dragonEnergy = [0, 0, 0, 0];
   isAnimating = false;
@@ -4430,10 +5380,11 @@ function resetGame() {
     clearTimeout(frozenTimeEvent);
     frozenTimeEvent = null;
   }
+  if (audioManager) {
+    audioManager.stopBgm();
+  }
   clearDragonSkillUi();
-  clearBoardSprites();
-  initializeBoard();
-  createBoardSprites();
+  rebuildGameplayBoard();
   enableBoardInput();
   updateUi();
   console.log('Game waiting for first move');
