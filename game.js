@@ -15,6 +15,12 @@ const config = {
   width: BOARD_RENDER_WIDTH,
   height: BOARD_RENDER_HEIGHT,
   transparent: true,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: BOARD_RENDER_WIDTH,
+    height: BOARD_RENDER_HEIGHT,
+  },
   scene: {
     preload: preload,
     create: create,
@@ -271,6 +277,7 @@ let lastSwappedCells = [];
 let activeDragInput = null;
 let isAnimating = false;
 let isGameOver = false;
+let isGameOverPending = false;
 let isResolving = false;
 let gameStarted = false;
 let score = 0;
@@ -411,6 +418,7 @@ function create() {
   createBoardSkinLayer();
   createBoardSprites();
   updateUi();
+  showTutorialOnFirstLaunch();
   console.log('Game waiting for first move');
 }
 
@@ -867,8 +875,8 @@ function loadAudioSettings() {
   const fallback = {
     musicEnabled: true,
     sfxEnabled: true,
-    musicVolume: 0.7,
-    sfxVolume: 0.8,
+    musicVolume: 0.35,
+    sfxVolume: 0.25,
   };
 
   try {
@@ -980,6 +988,26 @@ function setTutorialSeen() {
   try {
     window.localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
   } catch (e) {}
+}
+
+function hasSeenTutorial() {
+  try {
+    return window.localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'true';
+  } catch (e) {
+    return true;
+  }
+}
+
+function showTutorialOnFirstLaunch() {
+  if (hasSeenTutorial()) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    if (!isGameOver && !isTutorialOpen && !hasSeenTutorial()) {
+      openTutorial(0);
+    }
+  }, 0);
 }
 
 function openTutorial(pageIndex = 0) {
@@ -1310,7 +1338,7 @@ function getEggTextureKey(type) {
 }
 
 function canAcceptBoardInput() {
-  return !isOptionsPanelOpen && !isTutorialOpen && !isGameOver && !isAnimating && timer > 0;
+  return !isOptionsPanelOpen && !isTutorialOpen && !isGameOver && !isGameOverPending && !isAnimating && timer > 0;
 }
 
 function attachEggInputHandlers(sprite) {
@@ -1518,6 +1546,11 @@ function disableBoardInput() {
 }
 
 function enableBoardInput() {
+  if (isGameOver || isGameOverPending || timer <= 0) {
+    disableBoardInput();
+    return;
+  }
+
   getBoardSprites().forEach((sprite) => {
     try { sprite.setInteractive(); } catch (e) {}
   });
@@ -1574,7 +1607,7 @@ function isAdjacent(a, b) {
 }
 
 function swapEggs(first, second) {
-  if (isGameOver) {
+  if (isGameOver || isGameOverPending || timer <= 0) {
     console.log('Input ignored because game over');
     return;
   }
@@ -1647,6 +1680,7 @@ function swapEggs(first, second) {
             updateSpriteData(secondSprite, second.row, second.col);
             selectedEgg = null;
             isAnimating = false;
+            completePendingGameOverIfReady();
           },
         });
         return;
@@ -1668,12 +1702,9 @@ function swapEggs(first, second) {
       ];
       console.log('lastSwappedCells', lastSwappedCells);
       selectedEgg = null;
-      // Manual match start: set combo to 1 and show feedback
       startComboChain();
       startLeafScoreForSuccessfulMove();
-      comboCount = 1;
       updateUi();
-      pulseCombo();
       resolveBoard(false);
     },
   });
@@ -2162,6 +2193,9 @@ function finishResolveBoardChain(isAutomatic, stepNumber, wasCascadeCapped = fal
   comboCount = 0;
   updateUi();
   isAnimating = false;
+  if (completePendingGameOverIfReady()) {
+    return;
+  }
   enableBoardInput();
 }
 
@@ -2251,12 +2285,7 @@ function resolveBoard(isAutomatic = false) {
 
     const useSwappedTrigger = firstStep && !isAutomatic;
 
-    if (!firstStep) {
-      comboCount += 1;
-      pulseCombo();
-    }
     firstStep = false;
-    console.log('combo count', comboCount);
 
     effects.sort((a, b) => b.priority - a.priority);
     console.log('sorted effects by priority', effects.map((effect) => ({ type: effect.type, priority: effect.priority, eggType: effect.eggType })));
@@ -2990,6 +3019,15 @@ function pulseCombo() {
   } catch (e) {}
 }
 
+function registerComboDestruction(source = 'match') {
+  ensureComboChainActive();
+  comboCount += 1;
+  updateUi();
+  pulseCombo();
+  console.log('combo count', comboCount);
+  console.log('Combo destruction source:', source);
+}
+
 function animateRemovals(removalSet, onComplete, options = {}) {
   const source = options.source || 'match';
   const runId = options.runId || gameRunId;
@@ -3035,6 +3073,8 @@ function animateRemovals(removalSet, onComplete, options = {}) {
     }, runId);
     return;
   }
+
+  registerComboDestruction(source);
 
   let done = 0;
   toRemove.forEach((entry) => {
@@ -4187,6 +4227,24 @@ function sortPendingDragonSkillsByPriority() {
   console.log('Pending dragon skills after priority sort', pendingDragonSkills.slice());
 }
 
+function isTimerExpired() {
+  return timer <= 0 || isGameOverPending;
+}
+
+function shouldSkipSkillAfterTimeUp(skillType) {
+  return isTimerExpired() && (skillType === 'leaf' || skillType === 'ice');
+}
+
+function skipDragonSkillAfterTimeUp(skillType) {
+  const index = DRAGON_SKILL_TYPES.indexOf(skillType);
+  if (index !== -1) {
+    dragonEnergy[index] = 0;
+  }
+  dragonSkillReady[skillType] = false;
+  console.log('Dragon skill skipped after time up:', skillType);
+  updateDragonEnergyUi();
+}
+
 function finishDragonSkillQueueIfIdle() {
   if (pendingDragonSkills.length || pendingFireStorm || pendingEarthPetrify || earthPetrifyTimeout || isGameOver) {
     return;
@@ -4198,6 +4256,9 @@ function finishDragonSkillQueueIfIdle() {
   comboCount = 0;
   updateUi();
   isAnimating = false;
+  if (completePendingGameOverIfReady()) {
+    return;
+  }
   enableBoardInput();
 }
 
@@ -4220,6 +4281,12 @@ function activatePendingDragonSkills(isFinalResolution = false) {
   sortPendingDragonSkillsByPriority();
   while (pendingDragonSkills.length && !isGameOver && isCurrentRun(runId)) {
     const skillType = pendingDragonSkills.shift();
+
+    if (shouldSkipSkillAfterTimeUp(skillType)) {
+      skipDragonSkillAfterTimeUp(skillType);
+      continue;
+    }
+
     console.log('Pending skill activated:', skillType);
     console.log('Activating dragon skill by priority:', skillType);
 
@@ -4348,9 +4415,6 @@ function runPendingEarthPetrify() {
     console.log('row, col', egg.row, egg.col);
   });
 
-  comboCount = 1;
-  updateUi();
-  pulseCombo();
   if (audioManager) {
     audioManager.playSkillSfx(DRAGON_SKILL_SFX_ASSETS.earthPetrify.key, 'earthSkill');
   }
@@ -5261,13 +5325,37 @@ function startTimer() {
   console.log('Timer started');
 }
 
-function endGame() {
+function hasActiveFinalChain() {
+  return Boolean(
+    isResolving ||
+    isAnimating ||
+    isComboChainActive ||
+    delayedSpecialQueue.length ||
+    pendingDragonSkills.length ||
+    pendingFireStorm ||
+    pendingEarthPetrify ||
+    earthPetrifyTimeout ||
+    activeDragonCutIn
+  );
+}
+
+function completePendingGameOverIfReady() {
+  if (!isGameOverPending || hasActiveFinalChain()) {
+    return false;
+  }
+
+  showGameOverOverlay();
+  return true;
+}
+
+function showGameOverOverlay() {
   if (isGameOver) {
     return;
   }
 
-  console.log('Game over: freezing board');
+  console.log('Game over: final chain complete');
   isGameOver = true;
+  isGameOverPending = false;
   isResolving = false;
   isAnimating = true;
   activeDragInput = null;
@@ -5319,6 +5407,29 @@ function endGame() {
   gameOverOverlay.classList.remove('hidden');
 }
 
+function endGame() {
+  if (isGameOver || isGameOverPending) {
+    return;
+  }
+
+  timer = 0;
+  updateUi();
+  isGameOverPending = true;
+  activeDragInput = null;
+  deselectEgg();
+  selectedEgg = null;
+  disableBoardInput();
+  if (countdownEvent) {
+    countdownEvent.remove(false);
+    countdownEvent = null;
+  }
+
+  console.log('Game over pending: waiting for active chain to finish');
+  if (!hasActiveFinalChain()) {
+    showGameOverOverlay();
+  }
+}
+
 function resetGame() {
   gameRunId += 1;
   setOptionsPanelOpen(false);
@@ -5331,6 +5442,7 @@ function resetGame() {
   stopGameplayTweensAndTimers();
   gameOverOverlay.classList.add('hidden');
   isGameOver = false;
+  isGameOverPending = false;
   isResolving = false;
   gameStarted = false;
   score = 0;

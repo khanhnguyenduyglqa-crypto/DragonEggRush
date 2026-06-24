@@ -3,8 +3,10 @@ const path = require('path');
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
-    width: 1000,
+    width: 1440,
     height: 900,
+    minWidth: 1280,
+    minHeight: 720,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -13,6 +15,7 @@ function createWindow() {
   });
 
   mainWindow.removeMenu();
+  mainWindow.maximize();
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 

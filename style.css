@@ -4,6 +4,22 @@
   padding: 0;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+:root {
+  --page-padding: clamp(8px, 1.3vh, 16px);
+  --layout-gap: clamp(10px, 2vh, 24px);
+  --header-height: clamp(210px, 18vw, 300px);
+  --board-size: min(600px, calc(100vh - var(--header-height) - (var(--page-padding) * 2) - var(--layout-gap)));
+  --energy-gap: clamp(8px, calc(var(--board-size) / 44), 16px);
+  --energy-row-size: clamp(72px, calc((var(--board-size) - (var(--energy-gap) * 3)) / 4), 120px);
+}
+
 body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   /* Fallback background: keeps the current gradient visible if no custom art exists yet. */
@@ -17,23 +33,24 @@ body {
   background-repeat: no-repeat;
   background-attachment: fixed;
   color: #fff;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px;
+  padding: var(--page-padding);
 }
 
 .ui-panel {
   position: relative;
-  width: min(960px, 100%);
-  height: clamp(265px, 33vw, 360px);
+  width: min(960px, calc(100vw - (var(--page-padding) * 2)));
+  height: var(--header-height);
   background: transparent;
   border: 0;
   border-radius: 0;
-  padding: clamp(92px, 11vw, 130px) clamp(72px, 9vw, 108px) 18px;
-  margin-bottom: 4px;
+  padding: clamp(74px, 7vw, 108px) clamp(56px, 7vw, 100px) clamp(10px, 1.6vh, 18px);
+  margin-bottom: var(--layout-gap);
   box-shadow: none;
+  flex: 0 0 auto;
 }
 
 .header-bg-art {
@@ -281,6 +298,8 @@ button:hover {
 .options-panel {
   position: relative;
   width: min(280px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   padding: 16px;
   border: 1px solid rgba(246, 202, 119, 0.34);
   border-radius: 14px;
@@ -351,6 +370,8 @@ button:hover {
 .tutorial-panel {
   position: relative;
   width: min(560px, 94vw);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   padding: 28px;
   border: 1px solid rgba(246, 202, 119, 0.36);
   border-radius: 18px;
@@ -423,8 +444,8 @@ button:hover {
 
 #gameContainer {
   /* Board wrapper size: matches the rendered board frame with no internal offset. */
-  width: min(600px, 100%);
-  max-width: 600px;
+  width: var(--board-size);
+  max-width: min(600px, calc(100vw - (var(--page-padding) * 2)));
   aspect-ratio: 1 / 1;
   /* Real board fallback: keeps the board art visible if Phaser image loading fails. */
   background-image: url("assets/boards/default-board.png");
@@ -437,26 +458,35 @@ button:hover {
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
 }
 
+#gameContainer canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
 .game-area {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 24px;
-  width: min(1120px, 100%);
+  gap: var(--layout-gap);
+  width: min(1120px, calc(100vw - (var(--page-padding) * 2)));
   max-width: 100%;
   flex-wrap: nowrap;
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 .energy-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  width: min(420px, 100%);
-  flex: 0 0 420px;
+  gap: var(--energy-gap);
+  width: clamp(340px, 31vw, 420px);
+  flex: 0 0 clamp(340px, 31vw, 420px);
   background: transparent;
   border: none;
   padding: 0;
+  max-height: var(--board-size);
 }
 
 #gameContainer {
@@ -467,12 +497,12 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 120px;
+  min-height: var(--energy-row-size);
 }
 
 .dragon-portrait-slot {
-  width: 100px;
-  height: 100px;
+  width: min(100px, calc(var(--energy-row-size) - 10px));
+  height: min(100px, calc(var(--energy-row-size) - 10px));
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -503,10 +533,10 @@ button:hover {
 
 .energy-card {
   display: grid;
-  gap: 10px;
-  width: 276px;
+  gap: clamp(6px, calc(var(--energy-row-size) / 12), 10px);
+  width: clamp(230px, 20vw, 276px);
   min-width: 0;
-  padding: 14px 16px;
+  padding: clamp(9px, calc(var(--energy-row-size) / 9), 14px) clamp(12px, 1.2vw, 16px);
   background: rgba(18, 14, 36, 0.68);
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 16px;
@@ -702,6 +732,53 @@ button:hover {
 
   .energy-panel {
     flex: 1 1 420px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 901px) {
+  :root {
+    --page-padding: 8px;
+    --layout-gap: 10px;
+    --header-height: clamp(185px, 16vw, 235px);
+    --energy-gap: 8px;
+  }
+
+  .ui-panel {
+    padding-top: clamp(62px, 6vw, 90px);
+    padding-bottom: 8px;
+  }
+
+  .title {
+    margin-bottom: 6px;
+    font-size: clamp(1.45rem, 2.35vw, 2rem);
+  }
+
+  .stats-row {
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .stat {
+    padding: 7px 10px;
+  }
+
+  .stat-label {
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+  }
+
+  #scoreValue,
+  #timerValue,
+  #comboText {
+    font-size: 1.35rem;
+  }
+
+  .energy-title {
+    font-size: 0.9rem;
+  }
+
+  .energy-progress {
+    font-size: 0.82rem;
   }
 }
 
