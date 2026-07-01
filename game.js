@@ -19,8 +19,7 @@ const config = {
   height: BOARD_RENDER_HEIGHT,
   transparent: true,
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    mode: Phaser.Scale.NONE,
     width: BOARD_RENDER_WIDTH,
     height: BOARD_RENDER_HEIGHT,
   },
