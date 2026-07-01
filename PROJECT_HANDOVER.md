@@ -161,11 +161,11 @@ Fire:
 
 Ice:
 
-* LỜI TỪ CHỐI CỦA CRUSH
+* Xịt keo luôn
 
 Leaf:
 
-* RAU SẠCH CẤP ĐẠI HỌC
+* Tý rau tý bún
 
 Earth:
 
@@ -237,7 +237,7 @@ Presentation:
 
 Skill name:
 
-* LỜI TỪ CHỐI CỦA CRUSH
+* Xịt keo luôn
 
 Gameplay:
 
@@ -259,7 +259,7 @@ Presentation:
 
 Skill name:
 
-* RAU SẠCH CẤP ĐẠI HỌC
+* Tý rau tý bún
 
 Gameplay:
 

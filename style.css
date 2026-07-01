@@ -402,7 +402,7 @@ button:hover {
 
 .tutorial-panel {
   position: relative;
-  width: min(560px, 94vw);
+  width: min(720px, 94vw);
   max-height: calc(100vh - 48px);
   max-height: calc(100dvh - 48px);
   overflow: auto;
@@ -439,14 +439,272 @@ button:hover {
 
 .tutorial-content {
   display: grid;
-  gap: 12px;
-  margin: 0 0 24px 20px;
+  gap: 16px;
+  margin: 0 0 24px;
   color: #f8edcf;
   line-height: 1.45;
 }
 
-.tutorial-content li::marker {
+.tutorial-copy-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tutorial-copy-list li::marker {
   color: #f5c66b;
+}
+
+.tutorial-visual-panel,
+.tutorial-match-card,
+.tutorial-skill-card {
+  border: 1px solid rgba(246, 202, 119, 0.28);
+  background:
+    linear-gradient(135deg, rgba(78, 52, 34, 0.74), rgba(21, 18, 34, 0.84)),
+    rgba(16, 12, 22, 0.88);
+  box-shadow: inset 0 0 20px rgba(255, 211, 126, 0.06), 0 12px 32px rgba(0, 0, 0, 0.24);
+}
+
+.tutorial-visual-panel {
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.tutorial-controls-layout {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.72fr) 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+.tutorial-mini-board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255, 232, 148, 0.24);
+  border-radius: 10px;
+  background: rgba(6, 5, 10, 0.62);
+}
+
+.tutorial-mini-cell,
+.tutorial-lt-cell {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  aspect-ratio: 1 / 1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.tutorial-egg {
+  display: inline-block;
+  width: 26px;
+  height: 34px;
+  border-radius: 50% 50% 45% 45%;
+  box-shadow: inset -5px -7px 8px rgba(0, 0, 0, 0.28), inset 5px 5px 7px rgba(255, 255, 255, 0.28), 0 4px 10px rgba(0, 0, 0, 0.28);
+}
+
+.tutorial-egg-fire {
+  background: radial-gradient(circle at 36% 25%, #ffd68a, #ff4d2e 48%, #7e1715 100%);
+}
+
+.tutorial-egg-ice {
+  background: radial-gradient(circle at 36% 25%, #ffffff, #7ed8ff 48%, #2265a8 100%);
+}
+
+.tutorial-egg-leaf {
+  background: radial-gradient(circle at 36% 25%, #dbffb2, #56d86a 48%, #1d7d36 100%);
+}
+
+.tutorial-egg-earth {
+  background: radial-gradient(circle at 36% 25%, #f1d08a, #b8860b 50%, #5b3d1f 100%);
+}
+
+.tutorial-empty-cell {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tutorial-swap-arrow {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  translate: -50% 0;
+  color: #ffe8a6;
+  font-size: 2rem;
+  font-weight: 900;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.tutorial-control-notes {
+  display: grid;
+  gap: 9px;
+}
+
+.tutorial-control-chip {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.tutorial-control-icon {
+  display: inline-grid;
+  place-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  background: rgba(245, 198, 107, 0.18);
+  color: #ffe7a8;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tutorial-match-grid,
+.tutorial-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tutorial-match-card {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+  min-height: 134px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.tutorial-card-title {
+  color: #ffe7a8;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.tutorial-match-card p,
+.tutorial-skill-card p {
+  margin: 0;
+  color: #f8edcf;
+  font-size: 0.9rem;
+}
+
+.tutorial-match-eggs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+}
+
+.tutorial-beam-demo::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(126, 216, 255, 0.95), transparent);
+  box-shadow: 0 0 14px rgba(126, 216, 255, 0.86);
+}
+
+.tutorial-link-demo::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 2px;
+  border-top: 2px dashed rgba(255, 182, 78, 0.88);
+  filter: drop-shadow(0 0 6px rgba(255, 106, 26, 0.72));
+}
+
+.tutorial-lt-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  gap: 5px;
+  width: max-content;
+}
+
+.tutorial-lt-cell {
+  min-width: 34px;
+}
+
+.tutorial-lt-cell .tutorial-egg {
+  width: 19px;
+  height: 25px;
+}
+
+.tutorial-explosion-ring {
+  position: absolute;
+  inset: -6px;
+  border: 2px solid rgba(255, 218, 116, 0.58);
+  border-radius: 50%;
+  box-shadow: 0 0 18px rgba(255, 106, 26, 0.42);
+  pointer-events: none;
+}
+
+.tutorial-skill-card {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 10px;
+  align-items: center;
+  min-height: 104px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.tutorial-skill-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  color: #fff5dd;
+  font-size: 1.2rem;
+  font-weight: 900;
+  box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.12), 0 0 14px rgba(255, 255, 255, 0.12);
+}
+
+.tutorial-skill-fire .tutorial-skill-icon {
+  background: radial-gradient(circle, #ffbf42, #c43722);
+}
+
+.tutorial-skill-ice .tutorial-skill-icon {
+  background: radial-gradient(circle, #effcff, #2b88ca);
+}
+
+.tutorial-skill-leaf .tutorial-skill-icon {
+  background: radial-gradient(circle, #c7ff8a, #2f9a42);
+}
+
+.tutorial-skill-earth .tutorial-skill-icon {
+  background: radial-gradient(circle, #e0c068, #7a4f25);
+}
+
+.tutorial-skill-body {
+  min-width: 0;
+}
+
+.tutorial-skill-name {
+  margin: 2px 0 4px;
+  color: #fff7de;
+  font-size: 0.8rem;
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.72);
 }
 
 .tutorial-actions {
@@ -544,12 +802,20 @@ button:hover {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #gameContainer canvas {
   display: block;
   width: 100%;
   height: 100%;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .game-area {
@@ -679,7 +945,7 @@ button:hover {
 
 .dragon-tooltip {
   position: fixed;
-  z-index: 5000;
+  z-index: 9;
   max-width: min(320px, calc(100vw - 24px));
   padding: 10px 12px;
   border: 1px solid rgba(246, 202, 119, 0.36);
@@ -689,7 +955,8 @@ button:hover {
   font-size: 0.92rem;
   line-height: 1.4;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
-  pointer-events: none;
+  pointer-events: auto;
+  touch-action: none;
 }
 
 .dragon-ready-badge {
@@ -838,6 +1105,60 @@ button:hover {
     margin-bottom: 16px;
     line-height: 1.32;
     font-size: 0.92rem;
+  }
+
+  .tutorial-visual-panel {
+    padding: 12px;
+  }
+
+  .tutorial-controls-layout,
+  .tutorial-match-grid,
+  .tutorial-skill-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .tutorial-controls-layout {
+    grid-template-columns: 0.75fr 1fr;
+  }
+
+  .tutorial-mini-cell {
+    min-width: 38px;
+  }
+
+  .tutorial-egg {
+    width: 21px;
+    height: 28px;
+  }
+
+  .tutorial-control-chip {
+    grid-template-columns: 48px 1fr;
+    padding: 6px 8px;
+  }
+
+  .tutorial-match-card {
+    min-height: auto;
+    padding: 10px;
+  }
+
+  .tutorial-match-eggs {
+    min-height: 34px;
+  }
+
+  .tutorial-skill-card {
+    min-height: auto;
+    grid-template-columns: 40px 1fr;
+    padding: 10px;
+  }
+
+  .tutorial-skill-icon {
+    width: 38px;
+    height: 38px;
+    font-size: 1rem;
+  }
+
+  .tutorial-skill-name {
+    font-size: 0.74rem;
   }
 
   .tutorial-actions {

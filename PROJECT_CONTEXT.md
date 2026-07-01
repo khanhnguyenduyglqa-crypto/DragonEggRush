@@ -274,7 +274,7 @@ Visual/audio:
 
 Player-facing skill name:
 
-* LỜI TỪ CHỐI CỦA CRUSH
+* Xịt keo luôn
 
 Gameplay:
 
@@ -298,7 +298,7 @@ Visual/audio:
 
 Player-facing skill name:
 
-* RAU SẠCH CẤP ĐẠI HỌC
+* Tý rau tý bún
 
 Gameplay:
 

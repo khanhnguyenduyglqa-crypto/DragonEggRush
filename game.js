@@ -132,7 +132,7 @@ const DRAGON_CUT_IN_CONFIGS = {
   },
   ice: {
     dragonType: 'ice',
-    title: 'LỜI TỪ CHỐI CỦA CRUSH',
+    title: 'XỊT KEO LUÔN',
     portraitKey: 'ice_dragon',
     portraitPath: 'assets/dragons/ice-dragon.png',
     roarKey: DRAGON_ROAR_ASSETS.ice.key,
@@ -145,7 +145,7 @@ const DRAGON_CUT_IN_CONFIGS = {
   },
   leaf: {
     dragonType: 'leaf',
-    title: 'RAU SẠCH CẤP ĐẠI HỌC',
+    title: 'TÝ RAU TÝ BÚN',
     portraitKey: 'leaf_dragon',
     portraitPath: 'assets/dragons/leaf-dragon.png',
     roarKey: DRAGON_ROAR_ASSETS.leaf.key,
@@ -177,7 +177,7 @@ const SELECTED_SCALE = 1.15;
 const MATCH_SCORE = 10;
 const TIMER_SECONDS = 90;
 const EGG_DESTROY_DURATION = 260;
-const SWIPE_SWAP_THRESHOLD = 32;
+const SWIPE_SWAP_THRESHOLD_RATIO = 0.25;
 const MAX_PLAYER_CASCADE_STEPS = 8;
 const MAX_SKILL_CASCADE_STEPS = 5;
 const EARTH_CONVERSION_STAGGER = 55;
@@ -246,6 +246,7 @@ const AUDIO_SETTINGS_KEY = 'dragonEggRushAudioSettings';
 const TUTORIAL_PAGES = [
   {
     title: 'HOW TO PLAY',
+    type: 'controls',
     lines: [
       'Swap adjacent eggs to make matches.',
       'Click one egg, then click a neighboring egg.',
@@ -255,7 +256,9 @@ const TUTORIAL_PAGES = [
   },
   {
     title: 'SPECIAL MATCHES',
+    type: 'matches',
     lines: [
+      'Match 3: three eggs score immediately.',
       'Match 4: fires a beam that clears a row or column.',
       'Match 5: links to all eggs of the same type and destroys them.',
       'L / T shape: creates a powerful 3x3 explosion.',
@@ -263,6 +266,7 @@ const TUTORIAL_PAGES = [
   },
   {
     title: 'DRAGON SKILLS',
+    type: 'dragons',
     lines: [
       'Matching eggs charges the dragon of that element.',
       'When energy reaches 30, the dragon skill becomes ready.',
@@ -1031,6 +1035,185 @@ function setTutorialPage(pageIndex) {
   renderTutorialPage();
 }
 
+function createTutorialElement(tagName, className, text) {
+  const element = document.createElement(tagName);
+  if (className) {
+    element.className = className;
+  }
+  if (text) {
+    element.textContent = text;
+  }
+  return element;
+}
+
+function createTutorialBullets(lines) {
+  const list = createTutorialElement('ul', 'tutorial-copy-list');
+  lines.forEach((line) => {
+    const item = createTutorialElement('li', '', line);
+    list.appendChild(item);
+  });
+  return list;
+}
+
+function createTutorialEgg(type) {
+  return createTutorialElement('span', `tutorial-egg tutorial-egg-${type}`);
+}
+
+function createControlsTutorialVisual() {
+  const visual = createTutorialElement('div', 'tutorial-visual-panel tutorial-controls-layout');
+  const board = createTutorialElement('div', 'tutorial-mini-board tutorial-swap-board');
+  const cells = [
+    createTutorialEgg('fire'),
+    createTutorialEgg('ice'),
+    createTutorialElement('span', 'tutorial-empty-cell'),
+    createTutorialElement('span', 'tutorial-empty-cell'),
+  ];
+
+  cells.forEach((cell) => {
+    const tile = createTutorialElement('div', 'tutorial-mini-cell');
+    tile.appendChild(cell);
+    board.appendChild(tile);
+  });
+
+  const arrow = createTutorialElement('div', 'tutorial-swap-arrow', '→');
+  board.appendChild(arrow);
+
+  const notes = createTutorialElement('div', 'tutorial-control-notes');
+  [
+    ['Tap', 'Select an egg, then tap an adjacent egg.'],
+    ['Swipe', 'Drag toward a neighboring cell to swap.'],
+    ['Rule', 'Only adjacent eggs can move.'],
+  ].forEach(([label, text]) => {
+    const chip = createTutorialElement('div', 'tutorial-control-chip');
+    chip.appendChild(createTutorialElement('span', 'tutorial-control-icon', label));
+    chip.appendChild(createTutorialElement('span', '', text));
+    notes.appendChild(chip);
+  });
+
+  visual.appendChild(board);
+  visual.appendChild(notes);
+  return visual;
+}
+
+function createMatchEggRow(type, count, extraClass = '') {
+  const row = createTutorialElement('div', `tutorial-match-eggs ${extraClass}`.trim());
+  for (let index = 0; index < count; index += 1) {
+    row.appendChild(createTutorialEgg(type));
+  }
+  return row;
+}
+
+function createLtMatchDiagram() {
+  const grid = createTutorialElement('div', 'tutorial-lt-grid');
+  const activeCells = new Set(['0-0', '1-0', '2-0', '2-1', '2-2']);
+  for (let row = 0; row < 3; row += 1) {
+    for (let col = 0; col < 3; col += 1) {
+      const cell = createTutorialElement('div', 'tutorial-lt-cell');
+      if (activeCells.has(`${row}-${col}`)) {
+        cell.appendChild(createTutorialEgg('earth'));
+      }
+      grid.appendChild(cell);
+    }
+  }
+  grid.appendChild(createTutorialElement('div', 'tutorial-explosion-ring'));
+  return grid;
+}
+
+function createSpecialMatchesTutorialVisual() {
+  const visual = createTutorialElement('div', 'tutorial-match-grid');
+  const cards = [
+    {
+      title: 'Match 3',
+      text: 'Score and clear immediately.',
+      visual: createMatchEggRow('leaf', 3),
+    },
+    {
+      title: 'Match 4',
+      text: 'Creates a beam clear.',
+      visual: createMatchEggRow('ice', 4, 'tutorial-beam-demo'),
+    },
+    {
+      title: 'Match 5',
+      text: 'Links every same-color egg.',
+      visual: createMatchEggRow('fire', 5, 'tutorial-link-demo'),
+    },
+    {
+      title: 'L / T Shape',
+      text: 'Charges a 3x3 blast.',
+      visual: createLtMatchDiagram(),
+    },
+  ];
+
+  cards.forEach((cardData) => {
+    const card = createTutorialElement('div', 'tutorial-match-card');
+    card.appendChild(createTutorialElement('div', 'tutorial-card-title', cardData.title));
+    card.appendChild(cardData.visual);
+    card.appendChild(createTutorialElement('p', '', cardData.text));
+    visual.appendChild(card);
+  });
+
+  return visual;
+}
+
+function createDragonSkillsTutorialVisual() {
+  const visual = createTutorialElement('div', 'tutorial-skill-grid');
+  const skills = [
+    {
+      type: 'fire',
+      dragon: 'Fire Dragon',
+      icon: '☄',
+      skill: DRAGON_CUT_IN_CONFIGS.fire.title,
+      text: '3 meteors destroy 2x2 areas.',
+    },
+    {
+      type: 'ice',
+      dragon: 'Ice Dragon',
+      icon: '❄',
+      skill: DRAGON_CUT_IN_CONFIGS.ice.title,
+      text: 'Freezes the timer for 5 seconds.',
+    },
+    {
+      type: 'leaf',
+      dragon: 'Leaf Dragon',
+      icon: '×2',
+      skill: DRAGON_CUT_IN_CONFIGS.leaf.title,
+      text: 'Next 3 successful moves score double.',
+    },
+    {
+      type: 'earth',
+      dragon: 'Earth Dragon',
+      icon: '✦',
+      skill: DRAGON_CUT_IN_CONFIGS.earth.title,
+      text: 'Turns eggs to Earth, then shatters them.',
+    },
+  ];
+
+  skills.forEach((skillData) => {
+    const card = createTutorialElement('div', `tutorial-skill-card tutorial-skill-${skillData.type}`);
+    card.appendChild(createTutorialElement('div', 'tutorial-skill-icon', skillData.icon));
+    const body = createTutorialElement('div', 'tutorial-skill-body');
+    body.appendChild(createTutorialElement('div', 'tutorial-card-title', skillData.dragon));
+    body.appendChild(createTutorialElement('p', '', skillData.text));
+    card.appendChild(body);
+    visual.appendChild(card);
+  });
+
+  return visual;
+}
+
+function createTutorialVisual(page) {
+  if (page.type === 'controls') {
+    return createControlsTutorialVisual();
+  }
+  if (page.type === 'matches') {
+    return createSpecialMatchesTutorialVisual();
+  }
+  if (page.type === 'dragons') {
+    return createDragonSkillsTutorialVisual();
+  }
+  return null;
+}
+
 function renderTutorialPage() {
   if (!tutorialTitle || !tutorialContent || !tutorialPageIndicator) {
     return;
@@ -1040,11 +1223,11 @@ function renderTutorialPage() {
   tutorialTitle.textContent = page.title;
   tutorialPageIndicator.textContent = `${tutorialPageIndex + 1}/${TUTORIAL_PAGES.length}`;
   tutorialContent.innerHTML = '';
-  page.lines.forEach((line) => {
-    const item = document.createElement('li');
-    item.textContent = line;
-    tutorialContent.appendChild(item);
-  });
+  const visual = createTutorialVisual(page);
+  if (visual) {
+    tutorialContent.appendChild(visual);
+  }
+  tutorialContent.appendChild(createTutorialBullets(page.lines));
 
   if (tutorialBackButton) {
     tutorialBackButton.disabled = tutorialPageIndex === 0;
@@ -1064,6 +1247,7 @@ function setupDragonInfoTooltips() {
   tooltip.className = 'dragon-tooltip hidden';
   document.body.appendChild(tooltip);
   let hoverTimer = null;
+  let activeTooltipIcon = null;
 
   const clearHoverTimer = () => {
     if (hoverTimer) {
@@ -1074,50 +1258,116 @@ function setupDragonInfoTooltips() {
 
   const hideTooltip = () => {
     clearHoverTimer();
+    activeTooltipIcon = null;
     tooltip.classList.add('hidden');
     tooltip.textContent = '';
+  };
+
+  const getTooltipViewport = () => {
+    const visualViewport = window.visualViewport;
+    return {
+      width: visualViewport ? visualViewport.width : window.innerWidth,
+      height: visualViewport ? visualViewport.height : window.innerHeight,
+      offsetLeft: visualViewport ? visualViewport.offsetLeft : 0,
+      offsetTop: visualViewport ? visualViewport.offsetTop : 0,
+    };
   };
 
   const positionTooltip = (icon) => {
     const iconRect = icon.getBoundingClientRect();
     const tooltipRect = tooltip.getBoundingClientRect();
+    const viewport = getTooltipViewport();
     const gap = 10;
     const margin = 12;
     let left = iconRect.right + gap;
     let top = iconRect.top + iconRect.height / 2 - tooltipRect.height / 2;
+    const minLeft = viewport.offsetLeft + margin;
+    const minTop = viewport.offsetTop + margin;
+    const maxRight = viewport.offsetLeft + viewport.width - margin;
+    const maxBottom = viewport.offsetTop + viewport.height - margin;
 
-    if (left + tooltipRect.width + margin > window.innerWidth) {
+    if (left + tooltipRect.width > maxRight) {
       left = iconRect.left - tooltipRect.width - gap;
     }
-    if (left < margin) {
-      left = margin;
+    if (left < minLeft) {
+      left = minLeft;
     }
-    if (top + tooltipRect.height + margin > window.innerHeight) {
-      top = window.innerHeight - tooltipRect.height - margin;
+    if (top + tooltipRect.height > maxBottom) {
+      top = maxBottom - tooltipRect.height;
     }
-    if (top < margin) {
-      top = margin;
+    if (top < minTop) {
+      top = minTop;
     }
 
     tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
   };
 
+  const showTooltip = (icon) => {
+    if (isTutorialOpen) {
+      return;
+    }
+
+    tooltip.textContent = icon.dataset.tooltip || '';
+    tooltip.classList.remove('hidden');
+    activeTooltipIcon = icon;
+    positionTooltip(icon);
+  };
+
   icons.forEach((icon) => {
-    icon.addEventListener('pointerenter', () => {
+    icon.addEventListener('pointerenter', (event) => {
+      if (event.pointerType === 'touch') {
+        return;
+      }
+
       clearHoverTimer();
       hoverTimer = window.setTimeout(() => {
         hoverTimer = null;
-        tooltip.textContent = icon.dataset.tooltip || '';
-        tooltip.classList.remove('hidden');
-        positionTooltip(icon);
+        showTooltip(icon);
       }, 150);
     });
 
-    icon.addEventListener('pointerleave', hideTooltip);
+    icon.addEventListener('pointerleave', (event) => {
+      if (event.pointerType !== 'touch') {
+        hideTooltip();
+      }
+    });
     icon.addEventListener('pointercancel', hideTooltip);
+    icon.addEventListener('pointerdown', (event) => {
+      if (event.pointerType !== 'touch') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      clearHoverTimer();
+      if (activeTooltipIcon === icon && !tooltip.classList.contains('hidden')) {
+        hideTooltip();
+        return;
+      }
+
+      showTooltip(icon);
+    });
+    icon.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
   });
 
+  tooltip.addEventListener('pointerdown', (event) => {
+    event.stopPropagation();
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (tooltip.classList.contains('hidden')) {
+      return;
+    }
+
+    const target = event.target;
+    if (target && (target.closest('.info-icon') || target.closest('.dragon-tooltip'))) {
+      return;
+    }
+
+    hideTooltip();
+  });
   window.addEventListener('resize', hideTooltip);
   window.addEventListener('scroll', hideTooltip, true);
 }
@@ -1403,39 +1653,100 @@ function createTileSprite(row, col, x, y, type) {
   return sprite;
 }
 
+function getPointerBoardPosition(pointer) {
+  return {
+    x: Number.isFinite(pointer.worldX) ? pointer.worldX : pointer.x,
+    y: Number.isFinite(pointer.worldY) ? pointer.worldY : pointer.y,
+    screenX: pointer.x,
+    screenY: pointer.y,
+  };
+}
+
+function getPointerScaleDebugInfo() {
+  const canvas = gameInstance && gameInstance.game ? gameInstance.game.canvas : null;
+  const rect = canvas && canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+  const scaleManager = gameInstance ? gameInstance.scale : null;
+  const phaserDisplayScaleX = scaleManager && scaleManager.displayScale && Number.isFinite(scaleManager.displayScale.x)
+    ? Number(scaleManager.displayScale.x.toFixed(4))
+    : null;
+  const phaserDisplayScaleY = scaleManager && scaleManager.displayScale && Number.isFinite(scaleManager.displayScale.y)
+    ? Number(scaleManager.displayScale.y.toFixed(4))
+    : null;
+
+  return {
+    canvasDisplayWidth: rect ? Number(rect.width.toFixed(2)) : null,
+    canvasDisplayHeight: rect ? Number(rect.height.toFixed(2)) : null,
+    displayScaleX: rect ? Number((rect.width / BOARD_RENDER_WIDTH).toFixed(4)) : 1,
+    displayScaleY: rect ? Number((rect.height / BOARD_RENDER_HEIGHT).toFixed(4)) : 1,
+    phaserDisplayScaleX,
+    phaserDisplayScaleY,
+  };
+}
+
+function getSwipeSwapThreshold() {
+  const metrics = getBoardMetrics();
+  return Math.min(metrics.cellWidth, metrics.cellHeight) * SWIPE_SWAP_THRESHOLD_RATIO;
+}
+
 function handleEggPointerDown(row, col, pointer) {
   if (!canAcceptBoardInput()) {
     return;
   }
 
+  const pointerPosition = getPointerBoardPosition(pointer);
+  const metrics = getBoardMetrics();
   activeDragInput = {
     row,
     col,
-    startX: pointer.x,
-    startY: pointer.y,
+    startX: pointerPosition.x,
+    startY: pointerPosition.y,
+    startScreenX: pointerPosition.screenX,
+    startScreenY: pointerPosition.screenY,
     pointerId: pointer.id,
     dragSwapTriggered: false,
   };
+
+  console.log('drag pointerdown egg', {
+    row,
+    col,
+    pointerId: pointer.id,
+    x: pointerPosition.x,
+    y: pointerPosition.y,
+    screenX: pointerPosition.screenX,
+    screenY: pointerPosition.screenY,
+    boardX: metrics.boardX,
+    boardY: metrics.boardY,
+    boardWidth: metrics.boardWidth,
+    boardHeight: metrics.boardHeight,
+    cellSize: Math.min(metrics.cellWidth, metrics.cellHeight),
+    cellWidth: metrics.cellWidth,
+    cellHeight: metrics.cellHeight,
+    scale: getPointerScaleDebugInfo(),
+  });
 }
 
 function getSwipeTarget(start, dx, dy) {
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_SWAP_THRESHOLD) {
+  const threshold = getSwipeSwapThreshold();
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < threshold) {
     return null;
   }
 
   let row = start.row;
   let col = start.col;
+  let direction;
   if (Math.abs(dx) >= Math.abs(dy)) {
-    col += dx > 0 ? 1 : -1;
+    direction = dx > 0 ? 'right' : 'left';
+    col += direction === 'right' ? 1 : -1;
   } else {
-    row += dy > 0 ? 1 : -1;
+    direction = dy > 0 ? 'down' : 'up';
+    row += direction === 'down' ? 1 : -1;
   }
 
   if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) {
-    return { outOfBounds: true };
+    return { outOfBounds: true, direction, threshold };
   }
 
-  return { row, col };
+  return { row, col, direction, threshold };
 }
 
 function handleBoardPointerMove(pointer) {
@@ -1447,14 +1758,39 @@ function handleBoardPointerMove(pointer) {
     return;
   }
 
-  const dx = pointer.x - activeDragInput.startX;
-  const dy = pointer.y - activeDragInput.startY;
+  const pointerPosition = getPointerBoardPosition(pointer);
+  const dx = pointerPosition.x - activeDragInput.startX;
+  const dy = pointerPosition.y - activeDragInput.startY;
+  console.log('drag pointermove', {
+    pointerId: pointer.id,
+    x: pointerPosition.x,
+    y: pointerPosition.y,
+    screenX: pointerPosition.screenX,
+    screenY: pointerPosition.screenY,
+    dx,
+    dy,
+    threshold: getSwipeSwapThreshold(),
+    scale: getPointerScaleDebugInfo(),
+  });
+
   const target = getSwipeTarget(activeDragInput, dx, dy);
   if (!target) {
     return;
   }
 
   activeDragInput.dragSwapTriggered = true;
+  console.log('detected drag direction', {
+    direction: target.direction,
+    fromRow: activeDragInput.row,
+    fromCol: activeDragInput.col,
+    targetRow: target.row,
+    targetCol: target.col,
+    outOfBounds: Boolean(target.outOfBounds),
+    dx,
+    dy,
+    threshold: target.threshold,
+  });
+
   if (target.outOfBounds) {
     return;
   }
@@ -1470,6 +1806,18 @@ function handleBoardPointerUp(pointer) {
   }
 
   const dragInput = activeDragInput;
+  const pointerPosition = getPointerBoardPosition(pointer);
+  console.log('drag pointerup', {
+    pointerId: pointer.id,
+    x: pointerPosition.x,
+    y: pointerPosition.y,
+    screenX: pointerPosition.screenX,
+    screenY: pointerPosition.screenY,
+    dx: pointerPosition.x - dragInput.startX,
+    dy: pointerPosition.y - dragInput.startY,
+    dragSwapTriggered: dragInput.dragSwapTriggered,
+  });
+
   activeDragInput = null;
   if (dragInput.dragSwapTriggered) {
     return;
