@@ -2,29 +2,136 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Dragon Egg Rush</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="ui-panel">
-    <img class="header-bg-art" src="assets/ui/header-bg.png" alt="" draggable="false" />
-    <div class="title">Dragon Egg Rush</div>
-    <div class="stats-row">
-      <div class="stat" data-stat-card="stat-card-gold">
-        <div class="stat-label">Score</div>
-        <div id="scoreValue">0</div>
+  <div id="appViewport" class="app-viewport">
+    <div id="appShell" class="app-shell">
+      <div class="ui-panel">
+        <img class="header-bg-art" src="assets/ui/header-bg.png" alt="" draggable="false" />
+        <div class="title">Dragon Egg Rush</div>
+        <div class="stats-row">
+          <div class="stat" data-stat-card="stat-card-gold">
+            <div class="stat-label">Score</div>
+            <div id="scoreValue">0</div>
+          </div>
+          <div class="stat" data-stat-card="stat-card-blue">
+            <div class="stat-label">Timer</div>
+            <div id="timerValue">90</div>
+          </div>
+          <div class="stat" data-stat-card="stat-card-gold">
+            <div class="stat-label">Combo</div>
+            <div id="comboText">None</div>
+          </div>
+        </div>
+        <button id="optionsButton" class="options-button" type="button" aria-expanded="false" aria-controls="optionsPanel">&#9881; Options</button>
       </div>
-      <div class="stat" data-stat-card="stat-card-blue">
-        <div class="stat-label">Timer</div>
-        <div id="timerValue">90</div>
-      </div>
-      <div class="stat" data-stat-card="stat-card-gold">
-        <div class="stat-label">Combo</div>
-        <div id="comboText">None</div>
+
+      <div class="game-area">
+        <div class="energy-panel">
+          <div class="energy-meter dragon-energy-row">
+            <div class="dragon-portrait-slot fire-portrait">
+              <img src="assets/dragons/fire-dragon.png" alt="Fire Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+              <span class="dragon-fallback" hidden>&#128293;</span>
+            </div>
+            <div class="energy-card fire-energy-card">
+              <div class="energy-card-header">
+                <div>
+                  <div class="energy-title"><span class="element-icon">&#128293;</span> Fire Dragon</div>
+                </div>
+                <span class="dragon-ready-badge" id="fireReadyBadge" hidden>READY</span>
+                <span class="info-icon" data-tooltip="Summon 3 meteors that destroy 2x2 areas.">i</span>
+              </div>
+              <div class="energy-bar-row">
+                <div class="energy-bar">
+                  <div class="energy-fill fire-energy-fill" id="fireEnergyFill"></div>
+                </div>
+                <div class="energy-progress" id="fireEnergyProgress">0/30</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="energy-meter dragon-energy-row">
+            <div class="dragon-portrait-slot ice-portrait">
+              <img src="assets/dragons/ice-dragon.png" alt="Ice Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+              <span class="dragon-fallback" hidden>&#10052;&#65039;</span>
+            </div>
+            <div class="energy-card ice-energy-card">
+              <div class="energy-card-header">
+                <div>
+                  <div class="energy-title"><span class="element-icon">&#10052;&#65039;</span> Ice Dragon</div>
+                </div>
+                <span class="dragon-ready-badge" id="iceReadyBadge" hidden>READY</span>
+                <span class="info-icon" data-tooltip="Freeze the timer for 5 seconds.">i</span>
+              </div>
+              <div class="energy-bar-row">
+                <div class="energy-bar">
+                  <div class="energy-fill ice-energy-fill" id="iceEnergyFill"></div>
+                </div>
+                <div class="energy-progress" id="iceEnergyProgress">0/30</div>
+              </div>
+              <div class="frozen-time-countdown" style="display: none;"></div>
+            </div>
+          </div>
+
+          <div class="energy-meter dragon-energy-row">
+            <div class="dragon-portrait-slot leaf-portrait">
+              <img src="assets/dragons/leaf-dragon.png" alt="Leaf Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+              <span class="dragon-fallback" hidden>&#127807;</span>
+            </div>
+            <div class="energy-card leaf-energy-card">
+              <div class="energy-card-header">
+                <div>
+                  <div class="energy-title"><span class="element-icon">&#127807;</span> Leaf Dragon</div>
+                </div>
+                <span class="dragon-ready-badge" id="leafReadyBadge" hidden>READY</span>
+                <span class="info-icon" data-tooltip="Next 3 moves gain 2x score.">i</span>
+              </div>
+              <div class="energy-bar-row">
+                <div class="energy-bar">
+                  <div class="energy-fill leaf-energy-fill" id="leafEnergyFill"></div>
+                </div>
+                <div class="energy-progress" id="leafEnergyProgress">0/30</div>
+              </div>
+              <div class="blessing-move-counter" style="display: none;"></div>
+            </div>
+          </div>
+
+          <div class="energy-meter dragon-energy-row">
+            <div class="dragon-portrait-slot earth-portrait">
+              <img src="assets/dragons/earth-dragon.png" alt="Earth Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
+              <span class="dragon-fallback" hidden>&#129704;</span>
+            </div>
+            <div class="energy-card earth-energy-card">
+              <div class="energy-card-header">
+                <div>
+                  <div class="energy-title"><span class="element-icon">&#129704;</span> Earth Dragon</div>
+                </div>
+                <span class="dragon-ready-badge" id="earthReadyBadge" hidden>READY</span>
+                <span class="info-icon" data-tooltip="Convert 10 eggs into Earth Eggs and destroy all Earth Eggs.">i</span>
+              </div>
+              <div class="energy-bar-row">
+                <div class="energy-bar">
+                  <div class="energy-fill earth-energy-fill" id="earthEnergyFill"></div>
+                </div>
+                <div class="energy-progress" id="earthEnergyProgress">0/30</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="gameContainer"></div>
       </div>
     </div>
-    <button id="optionsButton" class="options-button" type="button" aria-expanded="false" aria-controls="optionsPanel">&#9881; Options</button>
+  </div>
+
+  <div id="rotatePhoneOverlay" class="rotate-phone-overlay hidden" aria-live="polite">
+    <div class="rotate-phone-panel">
+      <div class="rotate-phone-icon">ROTATE</div>
+      <div class="rotate-phone-title">Rotate your phone</div>
+      <p>Turn your phone to landscape to play Dragon Egg Rush.</p>
+    </div>
   </div>
 
   <div id="optionsOverlay" class="options-overlay hidden">
@@ -62,99 +169,6 @@
         <button id="tutorialNextButton" class="tutorial-button tutorial-next-button" type="button">Next</button>
       </div>
     </div>
-  </div>
-
-  <div class="game-area">
-    <div class="energy-panel">
-      <div class="energy-meter dragon-energy-row">
-        <!-- Dragon portrait assets live in assets/dragons/. Replace placeholder images by dropping PNG files with the expected names. -->
-        <div class="dragon-portrait-slot fire-portrait">
-          <img src="assets/dragons/fire-dragon.png" alt="Fire Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
-          <span class="dragon-fallback" hidden>🔥</span>
-        </div>
-        <div class="energy-card fire-energy-card">
-          <div class="energy-card-header">
-            <div>
-              <div class="energy-title"><span class="element-icon">🔥</span> Fire Dragon</div>
-            </div>
-            <span class="dragon-ready-badge" id="fireReadyBadge" hidden>READY</span>
-            <span class="info-icon" data-tooltip="Summon 3 meteors that destroy 2x2 areas.">i</span>
-          </div>
-          <div class="energy-bar-row">
-            <div class="energy-bar">
-              <div class="energy-fill fire-energy-fill" id="fireEnergyFill"></div>
-            </div>
-            <div class="energy-progress" id="fireEnergyProgress">0/30</div>
-          </div>
-        </div>
-      </div>
-      <div class="energy-meter dragon-energy-row">
-        <div class="dragon-portrait-slot ice-portrait">
-          <img src="assets/dragons/ice-dragon.png" alt="Ice Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
-          <span class="dragon-fallback" hidden>❄️</span>
-        </div>
-        <div class="energy-card ice-energy-card">
-          <div class="energy-card-header">
-            <div>
-              <div class="energy-title"><span class="element-icon">❄️</span> Ice Dragon</div>
-            </div>
-            <span class="dragon-ready-badge" id="iceReadyBadge" hidden>READY</span>
-            <span class="info-icon" data-tooltip="Freeze the timer for 5 seconds.">i</span>
-          </div>
-          <div class="energy-bar-row">
-            <div class="energy-bar">
-              <div class="energy-fill ice-energy-fill" id="iceEnergyFill"></div>
-            </div>
-            <div class="energy-progress" id="iceEnergyProgress">0/30</div>
-          </div>
-          <div class="frozen-time-countdown" style="display: none;"></div>
-        </div>
-      </div>
-      <div class="energy-meter dragon-energy-row">
-        <div class="dragon-portrait-slot leaf-portrait">
-          <img src="assets/dragons/leaf-dragon.png" alt="Leaf Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
-          <span class="dragon-fallback" hidden>🌿</span>
-        </div>
-        <div class="energy-card leaf-energy-card">
-          <div class="energy-card-header">
-            <div>
-              <div class="energy-title"><span class="element-icon">🌿</span> Leaf Dragon</div>
-            </div>
-            <span class="dragon-ready-badge" id="leafReadyBadge" hidden>READY</span>
-            <span class="info-icon" data-tooltip="Next 3 moves gain 2x score.">i</span>
-          </div>
-          <div class="energy-bar-row">
-            <div class="energy-bar">
-              <div class="energy-fill leaf-energy-fill" id="leafEnergyFill"></div>
-            </div>
-            <div class="energy-progress" id="leafEnergyProgress">0/30</div>
-          </div>
-          <div class="blessing-move-counter" style="display: none;"></div>
-        </div>
-      </div>
-      <div class="energy-meter dragon-energy-row">
-        <div class="dragon-portrait-slot earth-portrait">
-          <img src="assets/dragons/earth-dragon.png" alt="Earth Dragon" onerror="this.hidden = true; this.nextElementSibling.hidden = false;" />
-          <span class="dragon-fallback" hidden>🪨</span>
-        </div>
-        <div class="energy-card earth-energy-card">
-          <div class="energy-card-header">
-            <div>
-              <div class="energy-title"><span class="element-icon">🪨</span> Earth Dragon</div>
-            </div>
-            <span class="dragon-ready-badge" id="earthReadyBadge" hidden>READY</span>
-            <span class="info-icon" data-tooltip="Convert 10 eggs into Earth Eggs and destroy all Earth Eggs.">i</span>
-          </div>
-          <div class="energy-bar-row">
-            <div class="energy-bar">
-              <div class="energy-fill earth-energy-fill" id="earthEnergyFill"></div>
-            </div>
-            <div class="energy-progress" id="earthEnergyProgress">0/30</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div id="gameContainer"></div>
   </div>
 
   <div id="gameOverOverlay" class="overlay hidden">

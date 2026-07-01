@@ -8,16 +8,24 @@ html,
 body {
   width: 100%;
   height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 
 :root {
-  --page-padding: clamp(8px, 1.3vh, 16px);
-  --layout-gap: clamp(10px, 2vh, 24px);
-  --header-height: clamp(210px, 18vw, 300px);
-  --board-size: min(600px, calc(100vh - var(--header-height) - (var(--page-padding) * 2) - var(--layout-gap)));
-  --energy-gap: clamp(8px, calc(var(--board-size) / 44), 16px);
-  --energy-row-size: clamp(72px, calc((var(--board-size) - (var(--energy-gap) * 3)) / 4), 120px);
+  --design-width: 1120px;
+  --design-height: 860px;
+  --page-padding: 8px;
+  --layout-gap: 14px;
+  --header-height: 230px;
+  --board-size: 600px;
+  --energy-gap: 14px;
+  --energy-row-size: calc((var(--board-size) - (var(--energy-gap) * 3)) / 4);
+  --viewport-height: 100vh;
 }
 
 body {
@@ -33,21 +41,41 @@ body {
   background-repeat: no-repeat;
   background-attachment: fixed;
   color: #fff;
+  position: fixed;
+  inset: 0;
+}
+
+.app-viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  width: 100vw;
   height: 100vh;
+  height: 100dvh;
+}
+
+.app-shell {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--design-width);
+  height: var(--design-height);
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: var(--page-padding);
+  transform-origin: top left;
+  will-change: transform;
 }
 
 .ui-panel {
   position: relative;
-  width: min(960px, calc(100vw - (var(--page-padding) * 2)));
+  width: 960px;
   height: var(--header-height);
   background: transparent;
   border: 0;
   border-radius: 0;
-  padding: clamp(74px, 7vw, 108px) clamp(56px, 7vw, 100px) clamp(10px, 1.6vh, 18px);
+  padding: 92px 82px 12px;
   margin-bottom: var(--layout-gap);
   box-shadow: none;
   flex: 0 0 auto;
@@ -77,7 +105,7 @@ body {
   -webkit-text-stroke: 2.4px rgba(20, 10, 4, 0.96);
   paint-order: stroke fill;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.65rem, 3vw, 2.45rem);
+  font-size: 2.1rem;
   font-weight: 800;
   letter-spacing: 0.055em;
   line-height: 1;
@@ -125,7 +153,7 @@ body {
 }
 
 .stat-label {
-  font-size: clamp(1.05rem, 1.35vw, 1.22rem);
+  font-size: 1.1rem;
   color: #fff8e8;
   margin-bottom: 4px;
   font-weight: 800;
@@ -141,7 +169,7 @@ body {
 #scoreValue,
 #timerValue,
 #comboText {
-  font-size: clamp(1.65rem, 2.1vw, 2rem);
+  font-size: 1.8rem;
   font-weight: 700;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.72);
 }
@@ -268,7 +296,7 @@ button:hover {
 }
 
 .options-button {
-  position: fixed;
+  position: absolute !important;
   top: 22px;
   right: 22px;
   width: auto;
@@ -293,13 +321,17 @@ button:hover {
   place-items: center;
   padding: 24px;
   background: rgba(4, 3, 9, 0.48);
+  touch-action: none;
 }
 
 .options-panel {
   position: relative;
   width: min(280px, calc(100% - 32px));
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   padding: 16px;
   border: 1px solid rgba(246, 202, 119, 0.34);
   border-radius: 14px;
@@ -365,13 +397,17 @@ button:hover {
   place-items: center;
   padding: 24px;
   background: rgba(4, 3, 9, 0.62);
+  touch-action: none;
 }
 
 .tutorial-panel {
   position: relative;
   width: min(560px, 94vw);
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   padding: 28px;
   border: 1px solid rgba(246, 202, 119, 0.36);
   border-radius: 18px;
@@ -442,10 +478,62 @@ button:hover {
   filter: grayscale(0.35);
 }
 
+.rotate-phone-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  background:
+    radial-gradient(circle at top, rgba(47, 37, 74, 0.96), rgba(5, 3, 9, 0.98) 62%),
+    rgba(5, 3, 9, 0.98);
+  color: #fff4d6;
+  text-align: center;
+  touch-action: none;
+}
+
+.rotate-phone-panel {
+  width: min(420px, calc(100vw - 40px));
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.rotate-phone-icon {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border: 2px solid rgba(246, 202, 119, 0.72);
+  border-radius: 24px;
+  color: #ffe1a0;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35), inset 0 0 22px rgba(246, 202, 119, 0.12);
+}
+
+.rotate-phone-title {
+  color: #ffe1a0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rotate-phone-panel p {
+  max-width: 30ch;
+  color: #f8edcf;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
 #gameContainer {
   /* Board wrapper size: matches the rendered board frame with no internal offset. */
   width: var(--board-size);
-  max-width: min(600px, calc(100vw - (var(--page-padding) * 2)));
+  max-width: var(--board-size);
   aspect-ratio: 1 / 1;
   /* Real board fallback: keeps the board art visible if Phaser image loading fails. */
   background-image: url("assets/boards/default-board.png");
@@ -470,8 +558,8 @@ button:hover {
   align-items: center;
   justify-content: center;
   gap: var(--layout-gap);
-  width: min(1120px, calc(100vw - (var(--page-padding) * 2)));
-  max-width: 100%;
+  width: 100%;
+  max-width: var(--design-width);
   flex-wrap: nowrap;
   flex: 0 0 auto;
   min-height: 0;
@@ -481,8 +569,8 @@ button:hover {
   display: flex;
   flex-direction: column;
   gap: var(--energy-gap);
-  width: clamp(340px, 31vw, 420px);
-  flex: 0 0 clamp(340px, 31vw, 420px);
+  width: 420px;
+  flex: 0 0 420px;
   background: transparent;
   border: none;
   padding: 0;
@@ -534,7 +622,7 @@ button:hover {
 .energy-card {
   display: grid;
   gap: clamp(6px, calc(var(--energy-row-size) / 12), 10px);
-  width: clamp(230px, 20vw, 276px);
+  width: 276px;
   min-width: 0;
   padding: clamp(9px, calc(var(--energy-row-size) / 9), 14px) clamp(12px, 1.2vw, 16px);
   background: rgba(18, 14, 36, 0.68);
@@ -694,10 +782,11 @@ button:hover {
   place-items: center;
   background: rgba(0, 0, 0, 0.82);
   z-index: 10;
+  touch-action: none;
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .overlay-box {
@@ -707,6 +796,7 @@ button:hover {
   border: 1px solid rgba(255, 255, 255, 0.1);
   width: min(380px, 90vw);
   text-align: center;
+  touch-action: pan-y;
 }
 
 .overlay-box h2 {
@@ -725,117 +815,43 @@ button:hover {
   margin-bottom: 18px;
 }
 
-@media (max-width: 900px) {
-  .game-area {
-    flex-wrap: wrap;
+@media (max-width: 700px), (max-height: 430px) {
+  .tutorial-overlay,
+  .options-overlay,
+  .overlay {
+    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
   }
 
-  .energy-panel {
-    flex: 1 1 420px;
-  }
-}
-
-@media (max-height: 760px) and (min-width: 901px) {
-  :root {
-    --page-padding: 8px;
-    --layout-gap: 10px;
-    --header-height: clamp(185px, 16vw, 235px);
-    --energy-gap: 8px;
+  .tutorial-panel {
+    width: min(560px, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
+    padding: 18px;
   }
 
-  .ui-panel {
-    padding-top: clamp(62px, 6vw, 90px);
-    padding-bottom: 8px;
-  }
-
-  .title {
-    margin-bottom: 6px;
-    font-size: clamp(1.45rem, 2.35vw, 2rem);
-  }
-
-  .stats-row {
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-
-  .stat {
-    padding: 7px 10px;
-  }
-
-  .stat-label {
-    font-size: 0.95rem;
-    margin-bottom: 2px;
-  }
-
-  #scoreValue,
-  #timerValue,
-  #comboText {
+  .tutorial-panel h2 {
+    margin-bottom: 12px;
     font-size: 1.35rem;
   }
 
-  .energy-title {
-    font-size: 0.9rem;
+  .tutorial-content {
+    gap: 8px;
+    margin-bottom: 16px;
+    line-height: 1.32;
+    font-size: 0.92rem;
   }
 
-  .energy-progress {
-    font-size: 0.82rem;
-  }
-}
-
-@media (max-width: 640px) {
-  .ui-panel {
-    height: clamp(250px, 78vw, 360px);
-    padding: clamp(86px, 24vw, 112px) clamp(18px, 6vw, 38px) 14px;
+  .tutorial-actions {
+    gap: 8px;
   }
 
-  .title {
-    padding: 4px 0 0;
-    letter-spacing: 0.04em;
+  .tutorial-button,
+  .options-panel button {
+    padding: 9px 10px;
+    font-size: 0.86rem;
   }
 
-  .stats-row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  .options-button {
-    top: 18px;
-    right: 18px;
-    min-width: 96px;
-    padding: 8px 11px;
-    font-size: 0.82rem;
-  }
-
-  .stat {
-    padding: 8px 4px;
-  }
-
-  .stat-label {
-    font-size: 0.9rem;
-  }
-
-  #scoreValue,
-  #timerValue,
-  #comboText {
-    font-size: 1.15rem;
-  }
-
-  button {
-    max-width: 100%;
-  }
-
-  .energy-meter {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .dragon-portrait-slot {
-    width: 88px;
-    height: 88px;
-  }
-
-  .energy-card {
-    width: min(276px, 100%);
+  .options-panel {
+    max-height: calc(100dvh - 20px);
   }
 }
 

@@ -4,6 +4,9 @@ const COLS = GRID_SIZE;
 const TILE_SIZE = 100;
 const BOARD_RENDER_WIDTH = COLS * TILE_SIZE;
 const BOARD_RENDER_HEIGHT = ROWS * TILE_SIZE;
+const MOBILE_DESIGN_WIDTH = 1120;
+const MOBILE_DESIGN_HEIGHT = 860;
+const MOBILE_PORTRAIT_WIDTH_THRESHOLD = 780;
 // Playable inset for eggs: keeps sprites inside the decorative frame.
 const BOARD_INSET_X = 48;
 const BOARD_INSET_Y = 48;
@@ -241,7 +244,6 @@ const STAT_CARD_ASSETS = [
 ];
 const STAT_CARD_ASSET_BY_KEY = Object.fromEntries(STAT_CARD_ASSETS.map((asset) => [asset.key, asset]));
 const AUDIO_SETTINGS_KEY = 'dragonEggRushAudioSettings';
-const TUTORIAL_STORAGE_KEY = 'dragonEggRushTutorialSeen';
 const TUTORIAL_PAGES = [
   {
     title: 'HOW TO PLAY',
@@ -373,6 +375,7 @@ function preload() {
 
 function create() {
   gameInstance = this;
+  setupResponsiveLayout();
   generateEggTextures();
 
   scoreText = document.getElementById('scoreValue');
@@ -418,7 +421,7 @@ function create() {
   createBoardSkinLayer();
   createBoardSprites();
   updateUi();
-  showTutorialOnFirstLaunch();
+  showTutorialOnLaunch();
   console.log('Game waiting for first move');
 }
 
@@ -984,27 +987,9 @@ function setupTutorial() {
   renderTutorialPage();
 }
 
-function setTutorialSeen() {
-  try {
-    window.localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
-  } catch (e) {}
-}
-
-function hasSeenTutorial() {
-  try {
-    return window.localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'true';
-  } catch (e) {
-    return true;
-  }
-}
-
-function showTutorialOnFirstLaunch() {
-  if (hasSeenTutorial()) {
-    return;
-  }
-
+function showTutorialOnLaunch() {
   window.setTimeout(() => {
-    if (!isGameOver && !isTutorialOpen && !hasSeenTutorial()) {
+    if (!isGameOver && !isTutorialOpen) {
       openTutorial(0);
     }
   }, 0);
@@ -1035,7 +1020,6 @@ function closeTutorial() {
   activeDragInput = null;
   tutorialOverlay.classList.add('hidden');
   destroyTutorialDemoObjects();
-  setTutorialSeen();
   if (audioManager) audioManager.playSfx('uiClose');
 }
 
@@ -1165,6 +1149,55 @@ function generateEggTextures() {
 
 function update() {
   // No per-frame updates needed for this game.
+}
+
+function getVisibleViewportSize() {
+  const visualViewport = window.visualViewport;
+  return {
+    width: visualViewport ? visualViewport.width : window.innerWidth,
+    height: visualViewport ? visualViewport.height : window.innerHeight,
+  };
+}
+
+function updateResponsiveLayout() {
+  const appShell = document.getElementById('appShell');
+  const rotateOverlay = document.getElementById('rotatePhoneOverlay');
+  if (!appShell) {
+    return;
+  }
+
+  const viewport = getVisibleViewportSize();
+  const scale = Math.min(
+    viewport.width / MOBILE_DESIGN_WIDTH,
+    viewport.height / MOBILE_DESIGN_HEIGHT,
+    1
+  );
+  const scaledWidth = MOBILE_DESIGN_WIDTH * scale;
+  const scaledHeight = MOBILE_DESIGN_HEIGHT * scale;
+  const left = Math.max(0, (viewport.width - scaledWidth) / 2);
+  const top = Math.max(0, (viewport.height - scaledHeight) / 2);
+  const isNarrowPortrait = viewport.width < viewport.height && viewport.width < MOBILE_PORTRAIT_WIDTH_THRESHOLD;
+
+  document.documentElement.style.setProperty('--viewport-height', `${viewport.height}px`);
+  appShell.style.transform = `translate(${left}px, ${top}px) scale(${scale})`;
+
+  if (rotateOverlay) {
+    rotateOverlay.classList.toggle('hidden', !isNarrowPortrait);
+  }
+}
+
+function setupResponsiveLayout() {
+  updateResponsiveLayout();
+  window.addEventListener('resize', updateResponsiveLayout);
+  window.addEventListener('orientationchange', () => {
+    updateResponsiveLayout();
+    window.setTimeout(updateResponsiveLayout, 120);
+    window.setTimeout(updateResponsiveLayout, 360);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateResponsiveLayout);
+    window.visualViewport.addEventListener('scroll', updateResponsiveLayout);
+  }
 }
 
 function createStatCardBackground(cardElement, textureKey) {
