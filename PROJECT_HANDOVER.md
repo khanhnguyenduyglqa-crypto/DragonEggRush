@@ -115,6 +115,7 @@ Current behavior:
 * Cascades and combos are supported.
 * One successful player move creates one continuous combo chain.
 * Combo/cascade tracking continues across delayed specials, dragon skill activations, gravity/refill, and skill-caused cascades.
+* Combo count continues increasing for every destruction event in the same player-move chain.
 * Combo count resets only when the entire chain is finished and player input is restored.
 
 Pacing protection:
@@ -122,6 +123,13 @@ Pacing protection:
 * Cascade cap is implemented.
 * Very long automatic chains are stabilized safely.
 * Dragon-skill cascades respect the same chain tracking.
+
+Timer/game-over behavior:
+
+* Timer starts only after the first successful player move.
+* If time reaches 0 while the board is idle, Game Over appears immediately.
+* If time reaches 0 during an active combo chain, player input is disabled but the active chain finishes.
+* Final Game Over waits for cascades, delayed specials, queued dragon skills, gravity/refill, and skill-caused cascades.
 
 ---
 
@@ -161,11 +169,11 @@ Fire:
 
 Ice:
 
-* Xịt keo luôn
+* XỊT KEO LUÔN
 
 Leaf:
 
-* Tý rau tý bún
+* TÝ RAU TÝ BÚN
 
 Earth:
 
@@ -178,7 +186,11 @@ Internal IDs remain:
 * leaf
 * earth
 
-Skill names are hidden from normal dragon panels and are revealed only during cut-ins.
+Skill name visibility:
+
+* Hidden from normal dragon panels.
+* Hidden from Tutorial Page 3.
+* Revealed only during dragon cut-ins.
 
 ---
 
@@ -237,7 +249,7 @@ Presentation:
 
 Skill name:
 
-* Xịt keo luôn
+* XỊT KEO LUÔN
 
 Gameplay:
 
@@ -259,7 +271,7 @@ Presentation:
 
 Skill name:
 
-* Tý rau tý bún
+* TÝ RAU TÝ BÚN
 
 Gameplay:
 
@@ -328,20 +340,36 @@ Options menu contains:
 
 Tutorial:
 
-* 3 pages
-* Basic Controls
-* Special Matches
-* Dragon Skills
-* Blocks board input while open
-* Does not create gameplay-board demo objects
+* Auto-opens every time the game launches.
+* Closing and reopening the browser shows Tutorial again.
+* 3 pages: Basic Controls, Special Matches, Dragon Skills.
+* Uses visual DOM/CSS illustrations and diagrams.
+* Basic Controls shows click/tap, drag/swipe, and adjacent-swap examples.
+* Special Matches shows Match 3, Match 4, Match 5, and L/T diagrams.
+* Dragon Skills explains gameplay effects without revealing skill names.
+* Blocks board input while open.
+* Does not create gameplay-board demo objects.
+* Mobile landscape layout support has been improved.
 
 Tooltips:
 
-* Hover over info icon.
-* 150ms delay.
+* Desktop hover over info icon.
+* 150ms hover delay.
 * English descriptions.
 * Hide immediately on pointer exit.
-* Tooltip positioning avoids screen edges.
+* Mobile/touch tap toggles tooltip visibility.
+* Tapping another info icon switches tooltip content.
+* Tapping outside hides the tooltip.
+* Tooltip positioning avoids visible viewport edges.
+
+Mobile/web support:
+
+* Responsive scaling keeps the game inside the visible browser/Electron viewport.
+* Local mobile testing via Live Server is supported.
+* Mobile landscape play is supported.
+* Mobile portrait shows a rotate-phone overlay.
+* Drag/swipe input uses scaled pointer coordinates after responsive layout changes.
+* Game remains playable in mobile browser tabs, although normal browser UI bars may remain visible.
 
 ---
 
@@ -352,7 +380,9 @@ Audio manager:
 * Centralized.
 * Supports Music and SFX channels.
 * Settings persist in localStorage.
+* First-time defaults are Music 35% and SFX 25%.
 * SFX settings apply to cut-in roars and skill SFX.
+* Dragon roars and skill SFX use the reduced SFX default volume.
 * Missing asset files fall back safely without crashing.
 
 Dragon roar files:
@@ -404,9 +434,14 @@ Known fixed issues:
 * Restart during combo no longer leaves old combo/effects running.
 * Score no longer increases from old async chains after restart.
 * Tutorial rendering no longer replaces the real gameplay board.
+* Tutorial uses visual DOM/CSS diagrams while staying isolated from gameplay.
+* Skill names are hidden from normal panels and Tutorial Page 3.
+* Dragon info tooltips work on desktop hover and mobile tap.
+* Responsive scaling and drag/swipe input were improved for web/mobile.
 * Asset loading issues were resolved.
 * Dragon skill queue stability improved.
 * Combo/cascade tracking remains continuous across dragon skill activations.
+* Game Over waits for an active final combo chain to finish before showing the final score.
 
 ---
 
